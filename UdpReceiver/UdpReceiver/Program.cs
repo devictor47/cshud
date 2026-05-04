@@ -1,4 +1,5 @@
 ﻿
+using Fleck;
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
@@ -635,7 +636,7 @@ namespace UdpReceiver
             : 0
             );
 
-        static readonly List<WebSocket> clients = [];
+        static readonly List<IWebSocketConnection> clients = [];
         static readonly Lock clientsLock = new();
 
         static async Task Main()
@@ -688,35 +689,69 @@ namespace UdpReceiver
 
         static async Task WebSocketServer()
         {
-            // The same for now. Might change later.
-            string ws;
-            if (Environment.OSVersion.Platform == PlatformID.Unix)
-                ws = "http://*:5000/ws/";
-            else
-                ws = "http://localhost:5000/ws/";
+            string ws = "ws://127.0.0.1:5000/ws";
 
-            HttpListener listener = new();
-            listener.Prefixes.Add(ws);
-            listener.Start();
+            //HttpListener listener = new();
+            //listener.Prefixes.Add(ws);
+            //listener.Start();
 
-            Console.WriteLine($"Listening on WebSocket ws{ws[4..]}");
-
-            while (true)
+            try
             {
-                var context = await listener.GetContextAsync();
+                var server = new WebSocketServer(ws);
 
-                Console.WriteLine(context.Request.Url);
-
-                if (!context.Request.IsWebSocketRequest)
+                server.Start(socket =>
                 {
-                    context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
-                    context.Response.Close();
-                    continue;
-                }
+                    socket.OnOpen = () =>
+                    {
+                        lock (clientsLock)
+                        {
+                            clients.Add(socket);
+                            Log($"Client connected (total = {clients.Count})");
+                        }
+                    };
 
-                _ = HandleClient(context);
+                    socket.OnClose = () =>
+                    {
+                        lock (clientsLock)
+                        {
+                            clients.Remove(socket);
+                            Log($"Client disconnected (total = {clients.Count})");
+                        }
+                    };
+
+                    socket.OnMessage = message =>
+                    {
+                        using var doc = JsonDocument.Parse(message);
+                        var root = doc.RootElement;
+
+                        if (root.TryGetProperty("type", out var typeEl) && typeEl.GetString() == "full_state")
+                            _ = SendFullState(socket);
+                    };
+                });
             }
+            catch (Exception ex) { 
+                Console.WriteLine(ex.ToString());
+            }
+
+            Console.WriteLine($"Listening on WebSocket { ws }");
+
+            //while (true)
+            //{
+            //    var context = await listener.GetContextAsync();
+
+            //    Console.WriteLine(context.Request.Url);
+
+            //    if (!context.Request.IsWebSocketRequest)
+            //    {
+            //        context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
+            //        context.Response.Close();
+            //        continue;
+            //    }
+
+            //    _ = HandleClient(context);
+            //}
         }
+        
         static async Task HandleClient(HttpListenerContext context)
         {
             var wsContext = await context.AcceptWebSocketAsync(null);
@@ -724,7 +759,7 @@ namespace UdpReceiver
 
             lock (clientsLock)
             {
-                clients.Add(socket);
+                //clients.Add(socket);
                 Log($"Client connected (total = {clients.Count})");
             }
 
@@ -765,7 +800,7 @@ namespace UdpReceiver
 
                             if (type == "full_state")
                             {
-                                await SendFullState(socket);
+                                //await SendFullState(socket);
 
 #if DEBUG
                                 Log($"[WS RESPONSE] Sent full-state to client.");
@@ -779,7 +814,7 @@ namespace UdpReceiver
             {
                 lock (clientsLock)
                 {
-                    clients.Remove(socket);
+                    //clients.Remove(socket);
                     Log($"Client disconnected (total = {clients.Count})");
                 }
             }
@@ -799,27 +834,24 @@ namespace UdpReceiver
                     writer.Flush();
                 }
 
-                var payload = buffer.WrittenMemory;
-
-                List<WebSocket> clientsSnapshot;
+                List<IWebSocketConnection> clientsSnapshot;
                 lock (clientsLock)
                     clientsSnapshot = [.. clients];
 
                 if (clientsSnapshot.Count == 0)
                     continue;
 
+                var payload = buffer.WrittenMemory;
+
                 foreach (var ws in clientsSnapshot)
                 {
-                    if (ws.State == WebSocketState.Open)
+                    if (ws.IsAvailable)
                     {
-                        _ = ws.SendAsync(
-                            payload,
-                            WebSocketMessageType.Text,
-                            endOfMessage: true,
-                            CancellationToken.None
-                        ).AsTask().ContinueWith(t =>
+                        _ = ws.Send(
+                            Encoding.UTF8.GetString(payload.Span)
+                        ).ContinueWith(t =>
                         {
-                            if (t.IsFaulted || ws.State != WebSocketState.Open)
+                            if (t.IsFaulted || !ws.IsAvailable)
                             {
                                 lock (clientsLock)
                                     clients.Remove(ws);
@@ -1447,7 +1479,7 @@ namespace UdpReceiver
         }
 
         
-        static async Task SendFullState(WebSocket socket)
+        static async Task SendFullState(IWebSocketConnection socket)
         {
             var buffer = new ArrayBufferWriter<byte>(8192);
 
@@ -1513,12 +1545,14 @@ namespace UdpReceiver
                 w.Flush();
             }
 
-            await socket.SendAsync(
-                buffer.WrittenMemory,
-                WebSocketMessageType.Text,
-                endOfMessage: true,
-                CancellationToken.None
-            );
+            //await socket.SendAsync(
+            //    buffer.WrittenMemory,
+            //    WebSocketMessageType.Text,
+            //    endOfMessage: true,
+            //    CancellationToken.None
+            //);
+
+            await socket.Send(Encoding.UTF8.GetString(buffer.WrittenMemory.Span));
         }
 
         static string FlagsToString<T>(T flags) where T : struct, Enum

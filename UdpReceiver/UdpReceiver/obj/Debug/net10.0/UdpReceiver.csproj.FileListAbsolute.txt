@@ -13,3 +13,6 @@ C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\obj\Deb
 C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\obj\Debug\net10.0\UdpReceiver.pdb
 C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\obj\Debug\net10.0\UdpReceiver.genruntimeconfig.cache
 C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\obj\Debug\net10.0\ref\UdpReceiver.dll
+C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\bin\Debug\net10.0\Fleck.dll
+C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\obj\Debug\net10.0\UdpReceiver.csproj.AssemblyReference.cache
+C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\obj\Debug\net10.0\UdpRecei.73D4DB9A.Up2Date

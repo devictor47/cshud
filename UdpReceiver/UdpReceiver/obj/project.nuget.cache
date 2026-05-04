@@ -1,8 +1,10 @@
 {
   "version": 2,
-  "dgSpecHash": "g5I9y8b8Mmc=",
+  "dgSpecHash": "BwdybI2C0qg=",
   "success": true,
   "projectFilePath": "C:\\Users\\victo\\OneDrive\\Vs Projects\\CS 1.6\\cshud\\UdpReceiver\\UdpReceiver\\UdpReceiver.csproj",
-  "expectedPackageFiles": [],
+  "expectedPackageFiles": [
+    "C:\\Users\\victo\\.nuget\\packages\\fleck\\1.2.0\\fleck.1.2.0.nupkg.sha512"
+  ],
   "logs": []
 }

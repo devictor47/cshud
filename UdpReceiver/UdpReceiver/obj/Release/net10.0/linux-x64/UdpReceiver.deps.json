@@ -9,6 +9,7 @@
     ".NETCoreApp,Version=v10.0/linux-x64": {
       "UdpReceiver/1.0.0": {
         "dependencies": {
+          "Fleck": "1.2.0",
           "runtimepack.Microsoft.NETCore.App.Runtime.linux-x64": "10.0.7"
         },
         "runtime": {
@@ -26,10 +27,6 @@
             "fileVersion": "10.0.726.21808"
           },
           "System.Collections.NonGeneric.dll": {
-            "assemblyVersion": "10.0.0.0",
-            "fileVersion": "10.0.726.21808"
-          },
-          "System.Collections.Specialized.dll": {
             "assemblyVersion": "10.0.0.0",
             "fileVersion": "10.0.726.21808"
           },
@@ -77,10 +74,6 @@
             "assemblyVersion": "10.0.0.0",
             "fileVersion": "10.0.726.21808"
           },
-          "System.Net.HttpListener.dll": {
-            "assemblyVersion": "10.0.0.0",
-            "fileVersion": "10.0.726.21808"
-          },
           "System.Net.NameResolution.dll": {
             "assemblyVersion": "10.0.0.0",
             "fileVersion": "10.0.726.21808"
@@ -93,23 +86,11 @@
             "assemblyVersion": "10.0.0.0",
             "fileVersion": "10.0.726.21808"
           },
-          "System.Net.Requests.dll": {
-            "assemblyVersion": "10.0.0.0",
-            "fileVersion": "10.0.726.21808"
-          },
           "System.Net.Security.dll": {
             "assemblyVersion": "10.0.0.0",
             "fileVersion": "10.0.726.21808"
           },
           "System.Net.Sockets.dll": {
-            "assemblyVersion": "10.0.0.0",
-            "fileVersion": "10.0.726.21808"
-          },
-          "System.Net.WebHeaderCollection.dll": {
-            "assemblyVersion": "10.0.0.0",
-            "fileVersion": "10.0.726.21808"
-          },
-          "System.Net.WebSockets.dll": {
             "assemblyVersion": "10.0.0.0",
             "fileVersion": "10.0.726.21808"
           },
@@ -133,10 +114,6 @@
             "assemblyVersion": "10.0.0.0",
             "fileVersion": "10.0.726.21808"
           },
-          "System.Security.Claims.dll": {
-            "assemblyVersion": "10.0.0.0",
-            "fileVersion": "10.0.726.21808"
-          },
           "System.Security.Cryptography.dll": {
             "assemblyVersion": "10.0.0.0",
             "fileVersion": "10.0.726.21808"
@@ -149,9 +126,21 @@
             "assemblyVersion": "10.0.0.0",
             "fileVersion": "10.0.726.21808"
           },
+          "System.Text.RegularExpressions.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.726.21808"
+          },
           "System.Threading.Channels.dll": {
             "assemblyVersion": "10.0.0.0",
             "fileVersion": "10.0.726.21808"
+          }
+        }
+      },
+      "Fleck/1.2.0": {
+        "runtime": {
+          "lib/netcoreapp2.0/Fleck.dll": {
+            "assemblyVersion": "1.2.0.0",
+            "fileVersion": "1.2.0.0"
           }
         }
       }
@@ -167,6 +156,13 @@
       "type": "runtimepack",
       "serviceable": false,
       "sha512": ""
+    },
+    "Fleck/1.2.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-bPLXn6QbLAFoviur6XbrKB0Zn6x04E8VibHXyHZeJsoC7bkUl5DVtzM5cZgDuqHkIrBqAXJyTNJwSNIc6wBJ2Q==",
+      "path": "fleck/1.2.0",
+      "hashPath": "fleck.1.2.0.nupkg.sha512"
     }
   },
   "runtimes": {
