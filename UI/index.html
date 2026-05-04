@@ -1,0 +1,2146 @@
+<!DOCTYPE html>
+
+<html lang="pt-br">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <title>CS 1.6 Real-time HUD</title>
+
+    <style>
+        body {
+            background: #1a1a1a;
+            color: white;
+            font-family: 'Segoe UI', sans-serif;
+            padding: 0;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        body.resizing * {
+            user-select: none;
+            pointer-events: none;
+        }
+
+        body.resizing.res-row {
+            cursor: row-resize;
+        }
+
+        body.resizing.res-col {
+            cursor: col-resize;
+        }
+
+        #ui-grid {
+            display: grid;
+            height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+            display: grid;
+            grid-template-rows: 1fr 6px 10rem;
+        }
+
+        .resizer {
+            user-select: none;
+            pointer-events: auto;
+            touch-action: none;
+            border-radius: 6px;
+            position: relative;
+        }
+
+        .resizer::before {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.2rem;
+            opacity: 0.5;
+            pointer-events: none;
+            color: #fff;
+        }
+
+        .resizer::after {
+            content: "";
+            position: absolute;
+            inset: -4px;
+            /* expands clickable area */
+        }
+
+        .resizer:hover {
+            background: rgba(255, 255, 255, 0.35);
+        }
+
+        .resizer.row-resizer {
+            cursor: row-resize;
+        }
+
+        .resizer.row-resizer::before {
+            content: "•••";
+            letter-spacing: 1px;
+            transform: translateY(-15px);
+        }
+
+        .resizer.col-resizer {
+            cursor: col-resize;
+        }
+
+        .resizer.col-resizer::before {
+            content: "•\A•\A•";
+            line-height: 0.5;
+        }
+
+        #stream-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 260px) 1fr minmax(0, 260px);
+            gap: 0.5rem;
+            min-height: 0;
+            /* IMPORTANT for overflow correctness */
+        }
+
+        #chat-grid {
+            display: grid;
+            /* chat | resizer | chat | resizer | chat */
+            grid-template-columns: 1fr 6px 2fr 6px 1fr;
+            overflow: hidden;
+        }
+
+        #stream-grid>div,
+        #chat-grid>div:not(.resizer) {
+            border: 1px solid #ff8f00;
+            border-radius: 6px;
+        }
+
+        #map-column {
+            /*background-color: aquamarine;*/
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+            min-height: 0;
+            overflow: hidden;
+            /* Importante para o grid não explodir */
+            position: relative;
+        }
+
+        #map-column::before {
+            content: "";
+            position: absolute;
+            /* 2. Expandimos um pouco para evitar bordas brancas no blur */
+            top: -10px;
+            left: -10px;
+            right: -10px;
+            bottom: -10px;
+            /* 3. Definimos o background aqui */
+            background-image: var(--map-bg, url("overviews/loading.png"));
+            background-size: cover;
+            background-position: center;
+            /* 4. Aplicamos o blur apenas nesta camada */
+            filter: blur(5px) brightness(40%);
+            /* 5. Garantimos que fique atrás de tudo */
+            z-index: -1;
+        }
+
+        .map-content {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 0;
+            /* border: 3px solid red; */
+        }
+
+        #map-container {
+            height: 100%;
+            aspect-ratio: 4 / 3;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #ffffff;
+            position: relative;
+            cursor: grab
+        }
+
+        #map-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            z-index: 0;
+        }
+
+        #players-canvas {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: block;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .team-column {
+            display: grid;
+            grid-template-rows: auto 1fr;
+            min-height: 0;
+            padding-bottom: 6px;
+        }
+
+        .team-list {
+            padding: 0 6px;
+            overflow-y: scroll;
+        }
+
+        .team-list>.player-card:not(:first-child) {
+            margin-top: 6px;
+        }
+
+        #ct-column {
+            /*background-color: aqua;*/
+        }
+
+        #ct-column .player-card {
+            border-color: #016ed0;
+            background-color: #060d18;
+        }
+
+        #ct-column .hp-bar {
+            background: linear-gradient(to left, #016ed0, #000);
+        }
+
+        #ct-column .row-3 {
+            border-top: 1px solid #016ed0;
+        }
+
+        #t-column {
+            /*background-color: blanchedalmond;*/
+        }
+
+        #t-column .player-card {
+            border-color: #ff8f00;
+            background-color: #201507;
+            text-align: right;
+        }
+
+        #t-column .hp-bar {
+            background: linear-gradient(to right, #ff8f00, #000);
+            transform-origin: right;
+        }
+
+        #t-column .row-3 {
+            border-top: 1px solid #ff8f00;
+        }
+
+        #ct-chat {
+            grid-column: 1;
+            /*background-color: aqua;*/
+        }
+
+        #say-chat {
+            grid-column: 3;
+            /*background-color: aquamarine;*/
+        }
+
+        #t-chat {
+            grid-column: 5;
+            /*background-color: blanchedalmond;*/
+        }
+
+        .stream-grid-header,
+        .stream-grid-footer {
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        .stream-grid-footer.timer img {
+            position: relative;
+            top: 2px;
+            margin-right: 4px;
+        }
+
+        .stream-grid-header p,
+        .stream-grid-footer p {
+            margin: .5rem 0;
+        }
+
+        .player-card {
+            width: 100%;
+            min-width: 0;
+            height: 92px;
+            display: grid;
+            box-sizing: border-box;
+            grid-template-rows: repeat(3, minmax(0, 1fr));
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid #333;
+            border-radius: 4px;
+            color: white;
+            padding: 0 4px;
+        }
+
+        .row {
+            display: grid;
+            align-items: center;
+            padding: 2px 4px;
+        }
+
+        #t-column .row {
+            direction: rtl;
+        }
+
+        .row-1 {
+            grid-template-columns: minmax(0, 1fr) max-content max-content;
+            grid-column-gap: 6px;
+        }
+
+        .row-1>div {
+            min-width: 0;
+        }
+
+        #t-column .row-1>div:nth-child(2) {
+            order: 2;
+            /* kills */
+            flex-direction: row-reverse;
+        }
+
+        #t-column .row-1>div:nth-child(3) {
+            order: 1;
+            /* deaths */
+            flex-direction: row-reverse;
+        }
+
+        .row-1>div:nth-child(2),
+        .row-1>div:nth-child(3) {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            justify-content: flex-end;
+        }
+
+        .player-name {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-weight: 600;
+        }
+
+        .row-2 {
+            grid-template-columns: auto 1fr;
+            column-gap: 6px;
+            padding-bottom: 6px;
+        }
+
+        .money {
+            justify-self: start;
+            color: #01ff00;
+            font-weight: 501;
+            display: flex;
+            gap: 4px;
+        }
+
+        #t-column .money {
+            flex-direction: row-reverse;
+        }
+
+        .money img {
+            width: auto;
+            height: 19px;
+            filter: brightness(100%) sepia(100%) hue-rotate(50deg) saturate(600%) drop-shadow(0 0 4px rgb(60, 255, 0));
+        }
+
+        .money span {
+            position: relative;
+            top: -2px;
+        }
+
+        .items {
+            display: flex;
+            gap: 6px;
+            justify-content: flex-end;
+            align-items: center;
+            flex-direction: row-reverse;
+            justify-content: flex-start;
+        }
+
+        .items img {
+            max-width: 24px;
+            height: 19px;
+        }
+
+        .items img.c4 {
+            order: 5;
+            filter: drop-shadow(0 0 4px rgb(253, 192, 135));
+        }
+
+        .items img.kit {
+            order: 5;
+            filter: brightness(100%) sepia(100%) hue-rotate(50deg) saturate(600%) drop-shadow(0 0 4px rgb(60, 255, 0));
+        }
+
+        .items img.he {
+            order: 1;
+            filter: brightness(90%) sepia(100%) hue-rotate(300deg) saturate(300%)
+        }
+
+        .items img.fb {
+            order: 2;
+            filter: brightness(100%) sepia(100%) hue-rotate(22deg) saturate(300%)
+        }
+
+        .items img.sg {
+            order: 3;
+            filter: brightness(100%) sepia(100%) hue-rotate(50deg) saturate(300%)
+        }
+
+        .row-3 {
+            --hp: 100;
+            position: relative;
+            grid-template-columns: auto auto auto;
+            column-gap: 6px;
+            margin-left: -4px;
+            margin-right: -4px;
+            padding-left: 8px;
+            padding-right: 8px;
+        }
+
+        .row-3>* {
+            position: relative;
+            z-index: 1;
+        }
+
+        .hp {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            color: #ff5252;
+            font-weight: 501;
+        }
+
+        .hp img {
+            max-width: 24px;
+            height: 19px;
+        }
+
+        .hp img.hp-ico {
+            filter: brightness(90%) sepia(100%) hue-rotate(300deg) saturate(300%);
+        }
+
+        .hp img.armor {
+            filter: brightness(100%) sepia(100%) hue-rotate(180deg) saturate(700%) drop-shadow(0 0 4px rgb(169, 255, 255));
+        }
+
+        .hp-bar {
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            transform-origin: left;
+            transform: scaleX(calc(var(--hp) / 100));
+            background: linear-gradient(to left, #f00, #270000);
+            opacity: 0.8;
+            transition: transform 0.15s linear;
+            border-radius: 0px 0px 4px 0px;
+        }
+
+        .primary,
+        .secondary {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .icon {
+            width: auto;
+            height: 24px;
+            display: block;
+            fill: currentColor;
+            flex-shrink: 0;
+            filter: drop-shadow(0 0 2px currentColor);
+            overflow: visible;
+        }
+
+        .icon.inactive {
+           opacity: 0.35;
+           filter: none;
+        }
+
+        #t-column .icon {
+            transform: scaleX(-1);
+        }
+
+        .chat {
+            padding: 8px;
+            box-sizing: border-box;
+            overflow: auto;
+        }
+    </style>
+
+</head>
+
+<body>
+
+    <div id="svg-sprite" style="display:none">
+        <svg xmlns="http://www.w3.org/2000/svg">
+            <symbol id="weapon_ak47" viewBox="0 0 512 512">
+                <path d="" />
+            </symbol>
+        </svg>
+    </div>
+
+    <div id="ui-grid">
+
+        <!-- Top grid item that contains game data -->
+        <div id="stream-grid">
+
+            <!-- Top item left grid that contains CT team data -->
+            <div id="ct-column" class="team-column">
+                <div class="stream-grid-header">
+                    <p>CT Team</p>
+                </div>
+                <div class="team-list">
+
+                    <!-- Player -->
+                    <!--
+                    <div class="player-card">
+
+                        <div class="row row-1">
+                            <div class="player-name">
+                                layerNameasdadsasasdasdasdadsdas
+                            </div>
+                            <div class="kills">
+                                <img src="hud/kill.png" />210
+                            </div>
+                            <div class="deaths">
+                                <img src="hud/death.png" />313
+                            </div>
+                        </div>
+
+                        <div class="row row-2">
+                            <div class="money">
+                                <img src="hud/cash.png" />
+                                <span>16000</span>
+                            </div>
+                            <div class="items">
+                                <img class="c4" src="hud/c4.png" />
+                                <img class="kit" src="hud/kit.png" />
+                                <img class="he" src="hud/he.png" />
+                                <img class="fb" src="hud/fb.png" />
+                                <img class="sg" src="hud/sg.png" />
+                            </div>
+                        </div>
+
+                        <div class="row row-3">
+                            <div class="hp-bar"></div>
+                            <div class="hp">
+                                <img class="hp-ico" src="hud/hp_16x16.png" />
+                                <span>100</span>
+                                <img class="armor" src="hud/vesthelm.png" />
+                            </div>
+                            <div class="secondary">
+
+                            </div>
+                            <div class="primary">
+                            </div>
+                        </div>
+
+                    </div>
+                    -->
+
+                </div>
+            </div>
+
+            <!-- Top item middle grid that contains game data -->
+            <div id="map-column">
+                <div class="stream-grid-header">
+                    <p></p>
+                    <p>
+                        <!-- Score -->
+                        <span></span>
+                    </p>
+                </div>
+                <div class="map-content">
+                    <!-- Where a canvas will live with the minimap, etc. -->
+                    <div id="map-container">
+                        <canvas id="map-canvas" style="z-index: 0;"></canvas>
+                        <canvas id="players-canvas"></canvas>
+                    </div>
+                </div>
+                <div class="stream-grid-footer timer">
+                    <p>
+                        <img src="hud/timer.png" />
+                        <span>1:25</span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Top item right grid that contains T team data -->
+            <div id="t-column" class="team-column">
+                <div class="stream-grid-header">
+                    <p>T Team</p>
+                </div>
+                <div class="team-list">
+                </div>
+            </div>
+
+        </div>
+
+        <div id="row-resizer" class="resizer row-resizer"></div>
+
+        <!-- Bottom grid item that contains the chat windows -->
+        <div id="chat-grid">
+            <div id="ct-chat" class="chat team-chat"></div>
+            <div class="resizer col-resizer" data-index="0"></div>
+            <div id="say-chat" class="chat"></div>
+            <div class="resizer col-resizer" data-index="1"></div>
+            <div id="t-chat" class="chat team-chat"></div>
+        </div>
+
+    </div>
+
+    <!-- SOCKET, DATA STREAM -->
+    <script>
+
+        const players2 = [
+            //{ id: 1, name: "Victor_MD", team: 2, money: 0, yaw: 180, currYaw: 180, origin: { x: 1775, y: 2287, z: 95 }, currOrigin: {x: 1775, y: 2287, z: 95}, Hp: 100, ArmorValue: 100, Kills: 15, Deaths: 5, PrimaryWeapon: "M4A1" },
+            //{ id: 2, name: "Terror_Bot", team: 1, money: 0, yaw: 100, currYaw: 100, origin: { x: -1629, y: 2137, z: 36 }, currOrigin: {x: -1629, y: 2137, z: 36}, Hp: 80, ArmorValue: 0, Kills: 10, Deaths: 12, PrimaryWeapon: "AK47" }
+        ];
+        
+
+        const EventType = Object.freeze({
+            ROUND_ENDED: 0,
+            DIED: 1,
+            BOMB_PLANTING: 2,
+            BOMB_PLANT_ABORTED: 3,
+            BOMB_PLANTED: 4,
+            BOMB_DROPPED: 5,
+            BOMB_PICKED_UP: 6,
+            BOMB_DEFUSING: 7,
+            BOMB_DEFUSE_ABORTED: 8,
+            BOMB_DEFUSED: 9,
+            BOMB_EXPLODED: 10,
+            FLASHED: 11,
+            KILL_FLASHBANGED: 12
+        });
+
+        const players = new Map();
+        const ctList = document.querySelector("#ct-column .team-list");
+        const tList = document.querySelector("#t-column .team-list");
+        const scoreEl = document.querySelector(".stream-grid-header p:nth-child(2) span");
+        const timerEl = document.querySelector(".stream-grid-footer.timer span");
+
+        let lastFrame = performance.now();
+        let lastServerTickReceivedAt = 0, lastServerTick = 0, roundEndTick = 0;
+        let tScore = 0, ctScore = 0;
+        let socket = null;
+
+        function frame(now) {
+
+            animationLoop();
+            renderRoundTime();
+                
+            requestAnimationFrame(frame);
+        }
+
+        function formatTime(seconds) {
+          const m = Math.floor(seconds / 60);
+          const s = Math.floor(seconds % 60);
+          return `${m}:${s.toString().padStart(2, '0')}`;
+        }
+
+        function getCurrentTick() {
+            return lastServerTick +
+                ((performance.now() - lastServerTickReceivedAt) / 1000);
+        }
+
+        function getRoundTimeLeft() {
+            return Math.max(
+                0,
+                Math.ceil(roundEndTick - getCurrentTick())
+            );
+        }
+
+        const renderRoundTime = (() => {
+
+            let lastRenderedRoundTime = -1;
+
+            return async function() {
+            
+                const timeLeft = getRoundTimeLeft();
+
+                if (timeLeft === lastRenderedRoundTime) {
+                    //console.warn("Skipping round time render since it hasn't changed");
+                    return;
+                }
+
+                lastRenderedRoundTime = timeLeft;
+
+                timerEl.textContent = formatTime(timeLeft);
+            };
+        
+        })();
+
+        function updateRoundTime(newRoundEndTick) {
+            roundEndTick = newRoundEndTick;
+            renderRoundTime();
+        }
+
+        function updateScore(tScore, ctScore) {
+            if (this.tScore === tScore && this.ctScore === ctScore) {
+                return;
+            }
+            
+            this.tScore = tScore;
+            this.ctScore = ctScore;
+            scoreEl.textContent = `T ${tScore} x ${ctScore} CT`;
+        }
+
+        const handleMapChange = (() => {
+
+            let latstMapName = null;
+            let loadToken = 0;
+
+            return async function(mapName) {
+            
+                if (mapName === latstMapName) {
+                    return;
+                }
+
+                latstMapName = mapName;
+
+                const token = ++loadToken;
+            
+                const overview = await loadOverview(mapName);
+            
+                if (token !== loadToken) {
+                    console.warn(`Discarding overview load for ${mapName} due to newer load in progress`);
+                    return;
+                }
+            
+                currentOverview = overview;
+            
+                redraw();
+            };
+        
+        })();
+
+        function createPlayer(id) {
+        
+            const cardEl = document.createElement("div");
+
+            cardEl.className = "player-card";
+
+            cardEl.innerHTML = `
+                <div class="row row-1">
+                    <div class="player-name"></div>
+                
+                    <div class="kills">
+                        <img src="hud/kill.png" />
+                        <span></span>
+                    </div>
+                
+                    <div class="deaths">
+                        <img src="hud/death.png" />
+                        <span></span>
+                    </div>
+                </div>
+            
+                <div class="row row-2">
+                
+                    <div class="money">
+                        <img src="hud/cash.png" />
+                        <span></span>
+                    </div>
+                
+                    <div class="items"></div>
+                
+                </div>
+            
+                <div class="row row-3">
+                
+                    <div class="hp-bar"></div>
+                
+                    <div class="hp">
+                        <img class="hp-ico" src="hud/hp_16x16.png" />
+                        <span></span>
+                        <img class="armor" />
+                    </div>
+                
+                    <div class="secondary"></div>
+                    <div class="primary"></div>
+                
+                </div>
+            `;
+        
+            return {
+
+                id,
+
+                team: 0,
+
+                yaw: 0,
+                x: 0,
+                y: 0,
+                z: 0,
+
+                hp: 0,
+
+                armorType: 0,
+                armorValue: 0,
+
+                money: 0,
+
+                frags: 0,
+                deaths: 0,
+
+                currentWeapon: 0,
+
+                primaryWeapon: 0,
+                secondaryWeapon: 0,
+                grenades: 0,
+                hasC4: false,
+                items: 0,
+
+                name: "",
+
+                isDead: false,
+
+                renderYaw: 0,
+                renderX: 0,
+                renderY: 0,
+                renderZ: 0,
+
+                refs: {
+                    cardEl,
+                    nameEl: cardEl.querySelector(".player-name"),
+                    hpEl: cardEl.querySelector(".hp span"),
+                    hpBar: cardEl.querySelector(".hp-bar"),
+                    armorEl: cardEl.querySelector(".armor"),
+                    killsEl: cardEl.querySelector(".kills span"),
+                    deathsEl: cardEl.querySelector(".deaths span"),
+                    moneyEl: cardEl.querySelector(".money span"),
+                    primaryEl: cardEl.querySelector(".primary"),
+                    secondaryEl: cardEl.querySelector(".secondary"),
+                    itemsEl: cardEl.querySelector(".items")
+                },
+            
+                renderedPrimaryIcon: "",
+                renderedSecondaryIcon: "",
+            
+                lastHp: -1,
+                lastArmorValue: -1,
+                lastArmorType: -1,
+            
+                lastMoney: -1,
+            
+                lastFrags: -1,
+                lastDeaths: -1,
+            
+                lastName: "",
+            
+                lastGrenades: -1,
+                lastHasC4: null,
+                lastItems: -1
+            };
+        }
+
+        function applyPlayerDelta(player, d) {
+
+            if (d.team !== undefined && d.team !== player.team) {
+            
+                player.team = d.team;
+                
+                if (d.team == 1) {
+                    tList.appendChild(player.refs.cardEl);
+                }
+                else {
+                    if (d.team == 2) {
+                        ctList.appendChild(player.refs.cardEl);
+                    }
+                    else {
+                        // Remove player card.
+                        if (player.refs.cardEl.parentElement) {
+                            player.refs.cardEl.parentElement.removeChild(player.refs.cardEl);
+                        }
+                    }
+                }
+            }
+        
+            if (d.yaw !== undefined)
+                player.yaw = d.yaw;
+        
+            if (d.pos !== undefined) {
+                player.x = d.pos[0];
+                player.y = d.pos[1];
+                player.z = d.pos[2] ;
+            }
+        
+            if (d.hp !== undefined) {
+
+                // Hp can be negative due to overkill.
+                // Server does not hide this information.
+                player.hp = Math.max(0, d.hp);
+
+                // This is used only to restore an "alive" state.
+                // Actual death state is not expected to be handled
+                // via delta because there is no guarantee a packet
+                // with hp <= 0 will be received when a player dies.
+                // Death is handled via specific "died" event.
+                player.isDead = d.hp <= 0;
+            }
+        
+            if (d.armorVal !== undefined) {
+                player.armorValue = d.armorVal;
+                player.armorType = d.armorType;
+            }
+        
+            if (d.money !== undefined)
+                player.money = d.money;
+        
+            if (d.frags !== undefined)
+                player.frags = d.frags;
+        
+            if (d.deaths !== undefined)
+                player.deaths = d.deaths;
+        
+            if (d.wep !== undefined)
+                player.currentWeapon = d.wep;
+        
+            if (d.pwep !== undefined)
+                player.primaryWeapon = d.pwep;
+        
+            if (d.swep !== undefined)
+                player.secondaryWeapon = d.swep;
+        
+            if (d.gren !== undefined)
+                player.grenades = d.gren;
+        
+            if (d.c4 !== undefined)
+                player.hasC4 = d.c4;
+        
+            if (d.items !== undefined)
+                player.items = d.items;
+        
+            if (d.name !== undefined)
+                player.name = d.name;
+        
+            renderPlayerCard(player);
+        }
+
+        async function renderPlayerCard(player) {
+        
+            const refs = player.refs;
+               
+            if (player.name !== player.lastName) {
+                player.lastName = player.name;
+                refs.nameEl.textContent = player.name;
+            }
+        
+            if (player.hp !== player.lastHp) {
+                player.lastHp = player.hp;
+                refs.hpEl.textContent = player.hp;
+                refs.hpBar.style.setProperty(
+                    "--hp",
+                    player.hp
+                );
+            }
+              
+            if (
+                player.armorValue !== player.lastArmorValue ||
+                player.armorType !== player.lastArmorType
+            ) {
+            
+                player.lastArmorValue = player.armorValue;
+                player.lastArmorType = player.armorType;
+            
+                if (player.armorValue > 0) {
+                
+                    refs.armorEl.style.display = "";
+                
+                    switch (player.armorType) {
+                        case 0:
+                            refs.armorEl.src = "hud/vest.png";
+                            break;
+                        case 1:
+                            refs.armorEl.src = "hud/vesthelm.png";
+                            break;
+                        default:
+                            refs.armorEl.style.display = "none";
+                            break;
+                    }
+                }
+                else {
+                    refs.armorEl.style.display = "none";
+                }
+            }
+               
+            if (player.money !== player.lastMoney) {
+                player.lastMoney = player.money;
+                refs.moneyEl.textContent = player.money;
+            }
+               
+            if (player.frags !== player.lastFrags) {            
+                player.lastFrags = player.frags;            
+                refs.killsEl.textContent = player.frags;
+            }
+        
+            if (player.deaths !== player.lastDeaths) {
+                player.lastDeaths = player.deaths;
+                refs.deathsEl.textContent = player.deaths;
+            }
+        
+            const primaryIcon =
+                weaponData[player.primaryWeapon]?.icon ?? "";
+        
+            if (primaryIcon !== player.renderedPrimaryIcon) {
+            
+                player.renderedPrimaryIcon = primaryIcon;
+                refs.primaryEl.replaceChildren();
+            
+                if (primaryIcon) {
+                    const intendedIcon = primaryIcon;
+                    const icon = await createIcon(primaryIcon);
+                    if (player.renderedPrimaryIcon === intendedIcon)
+                        refs.primaryEl.appendChild(icon);
+                }
+            }
+        
+            const secondaryIcon =
+                weaponData[player.secondaryWeapon]?.icon ?? "";
+        
+            if (secondaryIcon !== player.renderedSecondaryIcon) {    
+
+                player.renderedSecondaryIcon = secondaryIcon;            
+                refs.secondaryEl.replaceChildren();
+            
+                if (secondaryIcon) {                
+                    const intendedIcon = secondaryIcon;                
+                    const icon = await createIcon(secondaryIcon);                
+                    if (player.renderedSecondaryIcon === intendedIcon)
+                        refs.secondaryEl.appendChild(icon);
+                }
+            }
+        
+            if (
+                player.grenades !== player.lastGrenades ||
+                player.hasC4 !== player.lastHasC4 ||
+                player.items !== player.lastItems
+            ) {
+            
+                player.lastGrenades = player.grenades;
+                player.lastHasC4 = player.hasC4;
+                player.lastItems = player.items;
+            
+                refs.itemsEl.replaceChildren();
+            
+                if (player.grenades & 1) {
+                
+                    const he = itemsEls("weapon_hegrenade");
+                
+                    if (he)
+                        refs.itemsEl.appendChild(he);
+                }
+            
+                if (player.grenades & 2) {
+                
+                    const fb = itemsEls("weapon_flashbang");
+                
+                    if (fb)
+                        refs.itemsEl.appendChild(fb);
+                }
+            
+                if (player.grenades & 4) {
+                
+                    const sg = itemsEls("weapon_smokegrenade");
+                
+                    if (sg)
+                        refs.itemsEl.appendChild(sg);
+                }
+            
+                if (player.hasC4) {
+                
+                    const c4 = itemsEls("weapon_c4");
+                
+                    if (c4)
+                        refs.itemsEl.appendChild(c4);
+                }
+            
+                if (player.items & 1) {
+                
+                    const kit = itemsEls("kit");
+                
+                    if (kit)
+                        refs.itemsEl.appendChild(kit);
+                }
+            }
+        }
+
+        function connectWebSocket() {
+
+            // TODO - make URL configurable via query string or something.
+            const url = "wss://ws.victoroak.site/ws";
+            
+            socket = new WebSocket(url);
+
+            socket.onopen = () => {
+                console.log("[WS] Connected");
+                
+                socket.send(JSON.stringify({
+                    type: "full_state"
+                }));
+            };
+
+            socket.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleMessage(data);
+                } catch (err) {
+                    console.error("[WS] Invalid JSON", err);
+                }
+            };
+
+            socket.onerror = (err) => {
+                console.error("[WS] Error", err);
+            };
+
+            socket.onclose = () => {
+                console.warn("[WS] Disconnected. Reconnecting in 2s...");
+                setTimeout(connectWebSocket, 2000);
+            };
+        }
+
+        async function handleMessage(msg) {
+
+            lastServerTick = msg.tick;
+            lastServerTickReceivedAt = performance.now();
+            
+            if (msg.global) {
+
+                // Handle global data if needed
+                // console.log("[WS] Global update", msg.global);
+
+                if (msg.global.rt !== undefined) {
+                    // Handle round time change if needed
+                    // "rt" is the supposedly round end tick, which
+                    // means we can calculate time left by
+                    // comparing it to the current tick.
+                    //console.log("[WS] Round end tick:", msg.global.rt);
+                    updateRoundTime(msg.global.rt);
+                }
+
+                // Scores are always sent together,
+                // i.e., if one is present, both are.
+                if (msg.global.t !== undefined) {
+                    // Update game score.
+                    updateScore(msg.global.t, msg.global.ct);
+                }
+
+                if (msg.global.map !== undefined) {
+                    handleMapChange(msg.global.map);
+                }
+            }
+
+            if (msg.players) {
+
+                // Handle players array if sent
+                // console.log("[WS] Players update", msg.players);
+
+                for (const delta of msg.players) {
+
+                    let player = players.get(delta.id);
+
+                    if (player && delta.drop === true) {
+                        // Player left, remove from UI and map.
+                        if (player.refs.cardEl.parentElement) {
+                            player.refs.cardEl.parentElement.removeChild(player.refs.cardEl);
+                        }
+                        players.delete(delta.id);
+                        continue;
+                    }
+
+                    // TODO - move to a logic where no card is created for
+                    // players that won't be rendered, such as spectators.
+                    if (!player) {
+                        player = createPlayer(delta.id);
+                        players.set(delta.id, player);
+                    }
+
+                    applyPlayerDelta(player, delta);
+                }
+            }
+
+            if (msg.events) {
+                // Handle events array if sent
+                // console.log("[WS] Events update", msg.events);
+
+                msg.events.forEach(event => {
+
+                    switch (event.type) {
+
+                        case EventType.DIED:
+
+                            // k = killer id
+                            // v = victim id
+                            // w = weapon id
+                            // a = assistant id (if any)
+                            // r = rarity
+                            let killer = players.get(event.k);
+                            let victim = players.get(event.v);
+                            let assistant = event.a ? players.get(event.a) : null;
+
+                            // icon is the name of the weapon.
+                            let weapon = weaponData[event.w]?.icon ?? null;
+
+                            const killEvent = {
+                                killerId: event.k,
+                                victimId: event.v,
+                                assistantId: event.a || null,
+
+                                killerName: killer?.name ?? "Unknown",
+                                victimName: victim?.name ?? "Unknown",
+                                assistantName: assistant?.name ?? null,
+
+                                killerTeam: killer?.team ?? null,
+                                victimTeam: victim?.team ?? null,
+
+                                weaponId: event.w,
+                                weaponIcon: weapon,
+
+                                rarity: event.r
+                            };
+
+                            console.log("[KILL]", killEvent);
+
+                            if (victim) {
+                                victim.isDead = true;
+                            }
+
+                            // TODO - addKillfeedEntry(killEvent);
+
+                            break;
+
+                        case EventType.BOMB_PLANTED:
+                            break;
+                    }
+                });
+            }
+        }
+
+        const itemsEls = (function() {
+
+            const els = {
+                "weapon_hegrenade": null,
+                "weapon_flashbang": null,
+                "weapon_smokegrenade": null,
+                "weapon_c4": null,
+                "kit": null
+            };
+            
+            els["weapon_hegrenade"] = document.createElement("img");
+            els["weapon_hegrenade"].src = "hud/he.png";
+            els["weapon_hegrenade"].classList.add("he");
+
+            els["weapon_flashbang"] = document.createElement("img");
+            els["weapon_flashbang"].src = "hud/fb.png";
+            els["weapon_flashbang"].classList.add("fb");
+
+            els["weapon_smokegrenade"] = document.createElement("img");
+            els["weapon_smokegrenade"].src = "hud/sg.png";
+            els["weapon_smokegrenade"].classList.add("sg");
+
+            els["weapon_c4"] = document.createElement("img");
+            els["weapon_c4"].src = "hud/c4.png";
+            els["weapon_c4"].classList.add("c4");
+
+            els["kit"] = document.createElement("img");
+            els["kit"].src = "hud/kit.png";
+            els["kit"].classList.add("kit");
+
+            return function(itemName) {
+                const el = els[itemName];
+                return el ? el.cloneNode() : null;
+            }
+
+        })();
+        
+    </script>
+
+    <!-- WEAPONS/ITEMS DRAWINGS -->
+    <script>
+
+        const WeaponSlot = {
+            NONE: "none",
+            PRIMARY: "primary",
+            SECONDARY: "secondary",
+            GRENADE: "grenade",
+            KNIFE: "knife",
+            C4: "c4"
+        };
+
+        const weaponData = {
+            0: { icon: null, slot: WeaponSlot.NONE },
+
+            // Pistols
+            1: { icon: "weapon_p250", slot: WeaponSlot.SECONDARY }, // P228
+            2: { icon: null, slot: WeaponSlot.NONE },      // unused
+            10: { icon: "weapon_elite", slot: WeaponSlot.SECONDARY },
+            11: { icon: "weapon_fiveseven", slot: WeaponSlot.SECONDARY },
+            16: { icon: "weapon_usp_silencer", slot: WeaponSlot.SECONDARY },
+            17: { icon: "weapon_glock", slot: WeaponSlot.SECONDARY },
+            26: { icon: "weapon_deagle", slot: WeaponSlot.SECONDARY },
+
+            // Rifles / snipers
+            3: { icon: "weapon_ssg08", slot: WeaponSlot.PRIMARY }, // scout
+            8: { icon: "weapon_aug", slot: WeaponSlot.PRIMARY },
+            13: { icon: "weapon_g3sg1", slot: WeaponSlot.PRIMARY },
+            14: { icon: "weapon_galilar", slot: WeaponSlot.PRIMARY },
+            15: { icon: "weapon_famas", slot: WeaponSlot.PRIMARY },
+            18: { icon: "weapon_awp", slot: WeaponSlot.PRIMARY },
+            22: { icon: "weapon_m4a1", slot: WeaponSlot.PRIMARY },
+            24: { icon: "weapon_g3sg1", slot: WeaponSlot.PRIMARY }, // sg550 fallback
+            27: { icon: "weapon_sg556", slot: WeaponSlot.PRIMARY }, // sg552
+            28: { icon: "weapon_ak47", slot: WeaponSlot.PRIMARY },
+
+            // SMGs
+            7: { icon: "weapon_mac10", slot: WeaponSlot.PRIMARY },
+            19: { icon: "weapon_mp7", slot: WeaponSlot.PRIMARY }, // mp5n
+            23: { icon: "weapon_mp9", slot: WeaponSlot.PRIMARY }, // tmp
+            12: { icon: "weapon_ump45", slot: WeaponSlot.PRIMARY },
+            30: { icon: "weapon_p90", slot: WeaponSlot.PRIMARY },
+
+            // Shotguns
+            5: { icon: "weapon_xm1014", slot: WeaponSlot.PRIMARY },
+            21: { icon: "weapon_nova", slot: WeaponSlot.PRIMARY },
+
+            // Machine gun
+            20: { icon: "weapon_m249", slot: WeaponSlot.PRIMARY },
+
+            // Grenades
+            4: { icon: "weapon_hegrenade", slot: WeaponSlot.GRENADE },
+            9: { icon: "weapon_smokegrenade", slot: WeaponSlot.GRENADE },
+            25: { icon: "weapon_flashbang", slot: WeaponSlot.GRENADE },
+
+            // Knife / C4
+            29: { icon: "weapon_knife", slot: WeaponSlot.KNIFE },
+            6: { icon: "weapon_c4", slot: WeaponSlot.C4 }
+        };
+
+        const iconCache = new Map();
+
+        async function createIcon(name) {
+
+            if (iconCache.has(name)) {
+                return iconCache.get(name).cloneNode(true);
+            }
+
+            const path = `hud/csgo-icons/svg_normal/${name}.svg`;
+
+            try {
+
+                const res = await fetch(path);
+                if (!res.ok) throw new Error(`Failed to load ${name}`);
+
+                const text = await res.text();
+
+                const wrapper = document.createElement("div");
+                wrapper.innerHTML = text;
+
+                const svg = wrapper.querySelector("svg");
+                svg.setAttribute("preserveAspectRatio", "xMaxYMid meet");
+                svg.style.overflow = "visible";
+                svg.classList.add("icon");
+
+                iconCache.set(name, svg);
+
+                return svg.cloneNode(true);
+
+            } catch (err) {
+                console.error(err);
+                return document.createElement("span"); // fallback
+            }
+        }
+
+        async function previewWeapons(primary, secondary, item) {
+
+            const entries = Object.entries(weaponData)
+                .filter(([_, wd]) => {
+                    return wd.icon;
+                }); // skip nulls
+
+            for (const [id, wd] of entries) {
+
+                let container = null;
+
+                switch (wd.slot) {
+                    case WeaponSlot.PRIMARY:
+                        container = primary;
+                        break;
+
+                    case WeaponSlot.SECONDARY:
+                        container = secondary;
+                        break;
+
+                    case WeaponSlot.GRENADE:
+                    case WeaponSlot.C4:
+
+                        //<img class="kit" src="hud/kit.png" />
+
+                        const img = document.createElement("img");
+
+                        switch (wd.icon) {
+                            case "weapon_hegrenade":
+                                img.src = "hud/he.png";
+                                img.classList.add("he");
+                                break;
+                            case "weapon_flashbang":
+                                img.src = "hud/fb.png";
+                                img.classList.add("fb");
+                                break;
+                            case "weapon_smokegrenade":
+                                img.src = "hud/sg.png";
+                                img.classList.add("sg");
+                                break;
+                            case "weapon_c4":
+                                img.src = "hud/c4.png";
+                                img.classList.add("c4");
+                                break;
+                        }
+
+                        item.appendChild(img);
+                        continue;
+
+                        break;
+
+                    case WeaponSlot.KNIFE:
+                        // optional: show or ignore
+                        container = secondary;
+                        break;
+                }
+
+                container.innerHTML = "";
+
+                const icon = await createIcon(wd.icon);
+                container.appendChild(icon);
+
+                //console.log(`Weapon ID: ${id} → ${name}`);
+
+                if (wd.icon == "weapon_ak47")
+                    return;
+
+                await new Promise(resolve => setTimeout(resolve, 400));
+            }
+        }
+
+        async function testIcons() {
+
+            const primaryEl = document.querySelector(".primary");
+            const secondaryEl = document.querySelector(".secondary");
+            const itemsEl = document.querySelector(".items");
+
+            //primary.innerHTML = ""; // clear previous
+
+            //const weapon = await createIcon(weaponIdToIcon[19]);
+            //primary.appendChild(weapon);
+
+            previewWeapons(primaryEl, secondaryEl, itemsEl);
+
+            previewWeapons(document.querySelector("#t-column .primary"),
+                document.querySelector("#t-column .secondary"),
+                document.querySelector("#t-column .items"));
+
+            const img = document.createElement("img");
+            img.src = "hud/kit.png";
+            img.classList.add("kit");
+            document.querySelector("#ct-column .items").appendChild(img);
+
+        }
+
+        //testIcons();
+
+    </script>
+
+    <!-- CANVAS, DRAWINGS... -->
+    <script>
+
+        let updatePending = false;
+        let currentOverview = null;
+        let camera = {
+            x: 0,
+            y: 0,
+            zoom: 1,
+            isDragging: false,
+            lastMouseX: 0,
+            lastMouseY: 0
+        };
+        const CS_JUMP_HEIGHT = 45;
+        const JUMP_THRESHOLD = 20; // Z changes 30 and above are considered jumps.
+        const JUMP_BOOST = 1.4;    // Increases circle size by 40% when a jump is detected.
+
+        const canvas = document.getElementById("map-canvas");
+        const canvasContainer = canvas.parentElement;
+
+        const ctx = canvas.getContext("2d");
+        ctx.imageSmoothingEnabled = false;
+
+        let playersCanvas = document.getElementById("players-canvas");
+        let playersCtx = playersCanvas.getContext("2d");
+
+        const observer = new ResizeObserver(() => {
+            redraw();
+        });
+
+        async function loadImage(path) {
+            return new Promise((resolve, reject) => {
+                const image = new Image();
+                image.onload = () => resolve(image);
+                image.onerror = reject;
+                image.src = path;
+            });
+        }
+
+        async function loadOverview(mapName) {
+
+            const imagePath = `overviews/${mapName}_ol.png`;
+            const imagePathFallback = `overviews/${mapName}.png`;
+            const descriptionPath = `overviews/${mapName}.txt`;
+            const bgImagePath = `overviews/${mapName}_bg.png`;
+
+            let img;
+            try {
+                img = await loadImage(imagePath);
+            } catch (e1) {
+
+                console.warn(`Failed to load overview image at ${imagePath}, trying fallback...`, e1);
+
+                try {
+                    img = await loadImage(imagePathFallback);
+                }
+                catch (e2) {
+                    console.warn(`Failed to load fallback overview image at ${imagePathFallback}`, e2);
+                    //throw e2; // Propagate error.
+                    img = null;
+                }
+            }
+
+            const [bgImg, descTxt] = await Promise.all([
+                loadImage(bgImagePath).catch((e) => {
+                    console.warn(`Failed to load background image at ${bgImagePath}, proceeding without it...`, e);
+                    return null;
+                }),
+                fetch(descriptionPath).then((response) => {
+                    if (response.ok)
+                        return response.text();
+
+                    console.warn(`Failed to load overview text at ${descriptionPath}: ${response.status} - ${response.statusText}`);
+                    return null;
+                })
+                .catch(e => {
+                    console.warn(`Failed to load description text at ${descriptionPath}`, e);
+                    return null; 
+                })
+            ]);
+
+            return {
+                image: img,
+                bgImage: bgImg,
+                text: descTxt ? parseOverview(descTxt) : null,
+                attemptedMap: mapName
+            };
+        }
+
+        function parseOverview(txt) {
+            const zoomMatch = txt.match(/ZOOM\s+([-\d.]+)/i);
+            const originMatch = txt.match(/ORIGIN\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)/i);
+            const rotatedMatch = txt.match(/ROTATED\s+(\d+)/i);
+
+            return {
+                zoom: zoomMatch ? parseFloat(zoomMatch[1]) : null,
+                origin: originMatch ? [
+                    parseFloat(originMatch[1]),
+                    parseFloat(originMatch[2]),
+                    parseFloat(originMatch[3])
+                ] : null,
+                rotated: rotatedMatch ? parseInt(rotatedMatch[1]) : 0,
+                mediumHeight: -35, // Mean Z coord of the map that allows for differentiating floor/ceiling in some maps. Adjust as needed per map.
+                heightScaleFactor: 0.0012, // How much the player circle changes size based on height difference. Adjust as needed per map.
+                minRadiusMult: 0.6, // Player circle cannot shrink past 60% its original size.
+                maxRadiusMult: 1.6 // Player circle cannot grow past 160% its original size.
+            };
+        }
+
+        function worldToCanvas(playerX, playerY) {
+            if (!currentOverview || !currentOverview.text)
+            return { x: 0, y: 0 };
+
+            const worldSize = 8192.0;
+            const zoom = currentOverview.text.zoom;
+            const origin = currentOverview.text.origin;
+
+            const aspect = canvas.width / canvas.height;
+
+            const viewWidth = worldSize / zoom;
+            const viewHeight = viewWidth / aspect;
+
+            let ny, nx;
+
+            if (!currentOverview.text.rotated) {
+                ny = -((playerX - origin[0]) / viewHeight);
+                nx = -((playerY - origin[1]) / viewWidth);
+            } else {
+                nx = ((playerX - origin[0]) / viewWidth);
+                ny = -((playerY - origin[1]) / viewHeight);
+            }
+
+            return {
+                x: (nx + 0.5) * canvas.width,
+                y: (ny + 0.5) * canvas.height
+            };
+        }
+
+        function drawPlayer(p) {
+
+            if (!currentOverview
+            || !currentOverview.image
+            || currentOverview.attemptedMap === "loading"
+            || !p.team
+            || p.team === 3) {
+                return;
+            }
+
+            const pos = worldToCanvas(p.renderX, p.renderY);
+            let r = 7 / camera.zoom;
+
+            // Calculate Z difference from medium height to determine scaling.
+            const zDelta = p.renderZ - currentOverview.text.mediumHeight;
+
+            // Map z delta to scale the circle size,
+            // with limits to prevent it from being too small or too large.
+            let scaleMult = 1 + (zDelta * currentOverview.text.heightScaleFactor);
+            
+            // Clamp the multiplyer so it respects overview limits.
+            scaleMult = Math.min(Math.max(currentOverview.text.minRadiusMult, scaleMult), currentOverview.text.maxRadiusMult);
+
+            const jumpMult = p.jumpEffect || 1.0;
+
+            // Define o raio final (r) com o multiplicador de profundidade
+            r = r * scaleMult * jumpMult;
+
+            if (p.isDead) {
+                playersCtx.globalAlpha = 0.60;   
+            }
+            else {
+                playersCtx.globalAlpha = 1.0;
+            }
+
+            // Player vision cone.
+            if (!p.isDead && p.renderYaw !== undefined) {
+
+                playersCtx.save();
+                playersCtx.translate(pos.x, pos.y);
+
+                // Converte Graus para Radianos
+                // No CS 1.6, v_angle[1] = 0 costuma ser o eixo X (Direita)
+                // Se o cone estiver apontando para o lado errado, adicione ou subtraia 90 ou 180 aqui.
+                const angleRad = (p.renderYaw * Math.PI) / 180;
+                const offset = !currentOverview.text.rotated ? Math.PI / 2 : 0;
+
+                // Rotacionamos o contexto
+                // IMPORTANTE: O sinal de negativo depende se o seu sistema Y do Canvas 
+                // está invertido em relação ao jogo (o que geralmente está).
+                playersCtx.rotate(-angleRad - offset); 
+
+                // Desenha o Cone (Triângulo ou Arco)
+                const coneLen = r * 5; // Comprimento do cone
+                const fov = 0.785398;  // Abertura do cone em radianos (45 graus)
+
+                const grad = playersCtx.createRadialGradient(0, 0, r, 0, 0, coneLen);
+                grad.addColorStop(0, p.team === 2 ? 'rgba(1, 110, 208, 1)' : 'rgba(255, 143, 0, 1)');
+                grad.addColorStop(1, p.team === 2 ? 'rgba(1, 110, 208, 0.15)' : 'rgba(255, 143, 0, 0.15)');
+
+                playersCtx.beginPath();
+                playersCtx.moveTo(0, 0);
+                playersCtx.arc(0, 0, coneLen, -fov, fov);
+                playersCtx.closePath();
+                playersCtx.fillStyle = grad;
+                playersCtx.fill();
+
+                playersCtx.beginPath();
+                playersCtx.moveTo(0, 0);
+                playersCtx.arc(0, 0, coneLen, -fov, fov);
+                playersCtx.closePath(); // Fecha o caminho para desenhar as linhas conectando ao centro
+
+                playersCtx.strokeStyle = `rgba(255, 255, 255, 0.5)`; // Branca semi-transparente
+                playersCtx.lineWidth = 1.5 / camera.zoom; // Espessura constante independente do zoom
+                playersCtx.lineJoin = "round"; // Bordas arredondadas nos cantos
+                playersCtx.stroke();
+
+                playersCtx.restore();
+            }
+
+            // Player circle.
+            // Keep size constant regardless of zoom by dividing by it.
+            playersCtx.beginPath();
+            playersCtx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+            playersCtx.fillStyle = p.isDead 
+                                        ? '#666'
+                                        : p.team === 2
+                                        ? '#016ed0'
+                                        : '#ff8f00';
+            // TODO - Maybe add extra effects depending on hp, etc.
+            playersCtx.fill();
+
+            // Outer black stroke
+            playersCtx.strokeStyle = "black";
+            playersCtx.lineWidth = 4 / camera.zoom;
+            playersCtx.stroke();
+
+            // Inner black stroke
+            playersCtx.lineWidth = 1 / camera.zoom;
+            playersCtx.stroke();
+
+            // White stroke between the two
+            playersCtx.strokeStyle = "white";
+            playersCtx.lineWidth = 2 / camera.zoom;
+            playersCtx.stroke();
+
+            // Drawing name.
+            // Adjust font size based on zoom to
+            // keep it readable and consistent.
+            const fontSize = 11 / camera.zoom;
+
+            playersCtx.font = `bold ${fontSize}px Segoe UI`;
+            playersCtx.lineJoin = "round";
+            
+            const padding = 3 / camera.zoom;
+            const offsetY = r + 6 / camera.zoom;
+
+            // Measure text
+            const metrics = playersCtx.measureText(p.name);
+            const textWidth = metrics.width;
+            const textHeight = fontSize;
+
+            // Preferred position above the player
+            let textX = pos.x;
+            let textY = pos.y - offsetY;
+
+            // 1. Flip vertically ONLY if
+            // completely out of top
+            if (textY - textHeight < 0) {
+                textY = pos.y + offsetY;
+            }
+    
+            // // 2. Clamp vertically (bottom edge safety)
+            if (textY > canvas.height - padding) {
+                textY = canvas.height - padding;
+            }
+
+            // 3. Horizontal clamping + dynamic alignment
+            let left = textX - textWidth / 2;
+            let right = textX + textWidth / 2;
+
+            if (left < padding) {
+                playersCtx.textAlign = "left";
+                textX = padding;
+            } 
+            else if (right > canvas.width - padding) {
+                playersCtx.textAlign = "right";
+                textX = canvas.width - padding;
+            } 
+            else {
+                playersCtx.textAlign = "center";
+            }
+
+            playersCtx.strokeStyle = "black";
+            playersCtx.lineWidth = 2 / camera.zoom;
+            playersCtx.lineJoin = "round";
+            playersCtx.strokeText(p.name, textX, textY);
+
+            playersCtx.fillStyle = "white";
+            playersCtx.fillText(p.name, textX, textY);
+            
+        }
+
+        function lerp(start, end, factor) {
+            return start + (end - start) * factor;
+        }
+
+        function lerpAngle(start, end, factor) {
+
+            let delta = end - start;
+
+            // Adjust between -180 and 180
+            if (delta > 180) delta -= 360;
+            if (delta < -180) delta += 360;
+
+            return start + delta * factor;
+        }
+
+        function animationLoop() {
+
+            // 1. Limpa o canvas dos jogadores
+            playersCtx.clearRect(0, 0, playersCanvas.width, playersCanvas.height);
+
+            // Required to pan/zoom the canvas.
+            playersCtx.save();
+
+            playersCtx.translate(camera.x, camera.y);
+            playersCtx.scale(camera.zoom, camera.zoom);
+        
+            // 2. Atualiza e desenha cada jogador
+            players.forEach(p => {
+
+                if (!p.team || p.team === 3) {
+                    // Skip spectators or unassigned team.
+                    return;
+                }
+
+                /*
+                // Detecting jumping to increase circle size.
+                // Right now someting is not right, sometimes detection
+                // happens after player hits the floor.
+                // The logic is right but maybe someting is wrong with
+                // the packets. Dive into this later on.
+
+                const zVelocity = Math.abs(p.origin.z) - Math.abs((p.lastTargetZ || p.origin.z));
+                p.lastTargetZ = p.origin.z;
+
+                if (zVelocity > JUMP_THRESHOLD) {
+                    p.jumpEffect = JUMP_BOOST;
+                    console.log(`Jump detected! Z velocity: ${zVelocity.toFixed(2)}`);
+                }
+                else {
+                    console.log(`Jump NOT detected! Z velocity: ${zVelocity.toFixed(2)}`);
+                }
+
+                // 3. Suaviza o efeito (volta para 1.0)
+                // Usamos um lerp mais lento (0.05 a 0.1) para o efeito de "mola"
+                p.jumpEffect = lerp(p.jumpEffect || 1.0, 1.0, 0.08);
+                */
+
+                // Too high will cause a choppy/jittery effect,
+                // and too low will make it look like slipping on ice.
+                p.renderX = lerp(p.renderX, p.x, 0.035);
+                p.renderY = lerp(p.renderY, p.y, 0.035);
+                p.renderZ = lerp(p.renderZ, p.z, 0.035);
+
+                if (p.yaw !== undefined) {
+
+                    if (p.renderYaw === undefined)
+                        p.renderYaw = p.yaw;
+
+                    p.renderYaw = lerpAngle(p.renderYaw, p.yaw, 0.06);
+                }
+
+                drawPlayer(p);
+            });            
+        
+            playersCtx.restore();
+        }
+
+        function redraw() {
+
+                if (!currentOverview) return;
+
+                // Check current size due to resizing
+                // and adjust canvas accordingly
+                const rect = canvas.getBoundingClientRect();
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+                playersCanvas.width = rect.width;
+                playersCanvas.height = rect.height;
+
+                // Clear everything.
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Apply camera transformations (pan + zoom)
+                // ctx.save();
+                ctx.translate(camera.x, camera.y);
+                ctx.scale(camera.zoom, camera.zoom);
+
+                if (!currentOverview.image) {
+                    ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                    // Configuração da Fonte
+                    ctx.fillStyle = "#FF4444"; // Vermelho vibrante
+                    ctx.font = "bold 20px Arial";
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+
+                    // Escreve a mensagem
+                    ctx.fillText("OVERVIEW NÃO ENCONTRADO", canvas.width / 2, canvas.height / 2 - 15);
+
+                    ctx.font = "14px Arial";
+                    ctx.fillStyle = "#AAAAAA";
+                    ctx.fillText(`Mapa: ${currentOverview.attemptedMap}`, canvas.width / 2, canvas.height / 2 + 15);
+                    return;
+                }
+
+                if (currentOverview.attemptedMap == "loading") {
+                    ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                    // Configuração da Fonte
+                    ctx.fillStyle = "#FF4444"; // Vermelho vibrante
+                    ctx.font = "bold 20px Arial";
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+
+                    // Escreve a mensagem
+                    ctx.fillText("Waiting for server data...", canvas.width / 2, canvas.height / 2 - 15);
+                    return;
+                }
+
+                ctx.drawImage(
+                    currentOverview.image, // ALWAYS original image
+                    0, 0, currentOverview.image.width, currentOverview.image.height,
+                    0, 0, canvas.width, canvas.height
+                );
+
+                if (currentOverview.bgImage) {
+                    const mapColumn = document.getElementById('map-column');
+                    mapColumn.style.setProperty('--map-bg', `url("${currentOverview.bgImage.src}")`);
+                }
+
+                players.forEach(p => drawPlayer(p));
+        }
+
+        // Canvas zooming.
+        canvasContainer.onwheel = (e) => {
+            e.preventDefault();
+
+            if (!currentOverview.image || currentOverview.attemptedMap == "loading")
+                return;
+
+            const zoomIntensity = 0.1;
+            const delta = e.deltaY > 0 ? -zoomIntensity : zoomIntensity;
+            const oldZoom = camera.zoom;
+            
+            // Limit zoom from 1x to 5x
+            const newZoom = Math.min(Math.max(1, camera.zoom + delta), 5);
+            
+            // If it didn't change, no need to recalculate
+            if (newZoom === oldZoom) return;
+            
+            // Zoom at mouse position
+            const rect = canvas.getBoundingClientRect();
+            const mouseCanvasX = e.clientX - rect.left;
+            const mouseCanvasY = e.clientY - rect.top;
+
+            // Mouse location in world considering current zoom and pan
+            const mouseWorldX = (mouseCanvasX - camera.x) / oldZoom;
+            const mouseWorldY = (mouseCanvasY - camera.y) / oldZoom;
+
+            // Apply new zoom
+            camera.zoom = newZoom;
+
+            // Calculate where the same WORLD point would be with the NEW zoom
+            // without moving the camera (hypothetical x=0, y=0)
+            const newMouseCanvasX = mouseWorldX * newZoom;
+            const newMouseCanvasY = mouseWorldY * newZoom;
+
+            // Adjust camera pan so that the world point under
+            // the mouse stays consistent before and after zoom
+            camera.x = mouseCanvasX - newMouseCanvasX;
+            camera.y = mouseCanvasY - newMouseCanvasY;
+
+            // Reset pan if zoom is 1 (fully visible)
+            if (camera.zoom === 1) {
+                camera.x = 0;
+                camera.y = 0;
+            }
+
+            redraw();
+        };
+
+        // Camera paning.
+        canvasContainer.onmousedown = (e) => {
+                if (camera.zoom > 1) {
+                    camera.isDragging = true;
+                    camera.lastMouseX = e.clientX;
+                    camera.lastMouseY = e.clientY;
+                    canvasContainer.style.cursor = 'grabbing';
+                }
+            };
+
+        window.onmousemove = (e) => {
+            if (camera.isDragging) {
+                // Move camera proportional to how much the mouse moved
+                camera.x += e.clientX - camera.lastMouseX;
+                camera.y += e.clientY - camera.lastMouseY;
+                camera.lastMouseX = e.clientX;
+                camera.lastMouseY = e.clientY;
+
+                // Redraw when dragging
+                redraw();
+            }
+        };
+
+        window.onmouseup = () => {
+            camera.isDragging = false;
+            canvasContainer.style.cursor =
+            camera.zoom > 1 ? 'grab' : 'default';
+        };
+
+        async function run() {
+
+            connectWebSocket();
+            
+            currentOverview = await loadOverview("loading");
+            observer.observe(canvas);
+            redraw();
+            
+            requestAnimationFrame(frame);
+        }
+
+        run();
+
+    </script>
+
+    <!-- UI STUFF, DRAGGABLES, ETC -->
+    <script>
+        /* =========================
+           GLOBAL STATE
+        ========================= */
+
+        const uiGrid = document.getElementById("ui-grid");
+        const rowResizer = document.getElementById("row-resizer");
+
+        const chatGrid = document.getElementById("chat-grid");
+        const colResizers = document.querySelectorAll(".col-resizer");
+
+        let isDraggingRow = false;
+        let isDraggingCol = false;
+
+        /* =========================
+           ROW RESIZING
+        ========================= */
+
+        let startY;
+        let startTopHeight;
+        let contentHeight;
+
+        let paddingTop;
+        let paddingBottom;
+
+        rowResizer.addEventListener("pointerdown", (e) => {
+            e.preventDefault();
+            isDraggingRow = true;
+
+            const gridRect = uiGrid.getBoundingClientRect();
+            const resizerRect = rowResizer.getBoundingClientRect();
+
+            const styles = getComputedStyle(uiGrid);
+            paddingTop = parseFloat(styles.paddingTop);
+            paddingBottom = parseFloat(styles.paddingBottom);
+
+            contentHeight = gridRect.height - paddingTop - paddingBottom;
+
+            startTopHeight = resizerRect.top - gridRect.top - paddingTop;
+            startY = e.clientY;
+
+            document.body.classList.add("resizing", "res-row");
+
+            rowResizer.setPointerCapture(e.pointerId);
+        });
+
+        rowResizer.addEventListener("pointermove", (e) => {
+            if (!isDraggingRow) return;
+
+            const dy = e.clientY - startY;
+
+            let newTop = startTopHeight + dy;
+            let newBottom = contentHeight - newTop - rowResizer.offsetHeight;
+
+            const minTop = 180;
+            const minBottom = 160;
+
+            if (newTop < minTop || newBottom < minBottom) return;
+
+            uiGrid.style.gridTemplateRows = `
+                                        ${newTop}px
+                                        6px
+                                        ${newBottom}px
+                                    `;
+        });
+
+        function stopRowResize(e) {
+            isDraggingRow = false;
+            document.body.classList.remove("resizing", "res-row");
+            rowResizer.releasePointerCapture(e.pointerId);
+        }
+
+        rowResizer.addEventListener("pointerup", stopRowResize);
+        rowResizer.addEventListener("pointercancel", stopRowResize);
+
+        /* =========================
+           COLUMN RESIZING
+        ========================= */
+
+        let startX;
+        let startWidths;
+        let activeResizerIndex = null;
+
+        colResizers.forEach((resizer, index) => {
+            resizer.addEventListener("pointerdown", (e) => {
+                e.preventDefault();
+                isDraggingCol = true;
+                startX = e.clientX;
+
+                const cols = getComputedStyle(chatGrid).gridTemplateColumns.split(" ");
+
+                startWidths = [
+                    parseFloat(cols[0]),
+                    parseFloat(cols[2]),
+                    parseFloat(cols[4])
+                ];
+
+                activeResizerIndex = index;
+
+                document.body.classList.add("resizing", "res-col");
+                resizer.setPointerCapture(e.pointerId);
+            });
+
+            resizer.addEventListener("pointermove", (e) => {
+                if (!isDraggingCol) return;
+
+                const dx = e.clientX - startX;
+                const index = activeResizerIndex;
+
+                let left = startWidths[index] + dx;
+                let right = startWidths[index + 1] - dx;
+
+                const min = 80;
+
+                if (left < min || right < min) return;
+
+                const newWidths = [...startWidths];
+                newWidths[index] = left;
+                newWidths[index + 1] = right;
+
+                chatGrid.style.gridTemplateColumns = `
+                                        ${newWidths[0]}px 6px
+                                        ${newWidths[1]}px 6px
+                                        ${newWidths[2]}px
+                                    `;
+            });
+
+            resizer.addEventListener("pointerup", (e) => {
+                isDraggingCol = false;
+
+                activeResizerIndex = null;
+
+                document.body.classList.remove("resizing", "res-col");
+                resizer.releasePointerCapture(e.pointerId);
+            });
+
+            resizer.addEventListener("pointercancel", (e) => {
+                isDraggingCol = false;
+
+                activeResizerIndex = null;
+
+                document.body.classList.remove("resizing", "res-col");
+                resizer.releasePointerCapture(e.pointerId);
+            });
+        });
+
+    </script>
+
+</body>
+
+</html>
