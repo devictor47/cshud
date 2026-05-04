@@ -1,0 +1,15 @@
+C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\obj\Debug\net10.0\UdpReceiver.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\obj\Debug\net10.0\UdpReceiver.AssemblyInfoInputs.cache
+C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\obj\Debug\net10.0\UdpReceiver.AssemblyInfo.cs
+C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\obj\Debug\net10.0\UdpReceiver.csproj.CoreCompileInputs.cache
+C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\obj\Debug\net10.0\UdpReceiver.sourcelink.json
+C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\bin\Debug\net10.0\UdpReceiver.exe
+C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\bin\Debug\net10.0\UdpReceiver.deps.json
+C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\bin\Debug\net10.0\UdpReceiver.runtimeconfig.json
+C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\bin\Debug\net10.0\UdpReceiver.dll
+C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\bin\Debug\net10.0\UdpReceiver.pdb
+C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\obj\Debug\net10.0\UdpReceiver.dll
+C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\obj\Debug\net10.0\refint\UdpReceiver.dll
+C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\obj\Debug\net10.0\UdpReceiver.pdb
+C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\obj\Debug\net10.0\UdpReceiver.genruntimeconfig.cache
+C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\obj\Debug\net10.0\ref\UdpReceiver.dll

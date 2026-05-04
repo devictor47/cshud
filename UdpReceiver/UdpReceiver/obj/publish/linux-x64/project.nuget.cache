@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "dgSpecHash": "1TYS3TmBNHI=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\victo\\OneDrive\\Vs Projects\\CS 1.6\\cshud\\UdpReceiver\\UdpReceiver\\UdpReceiver.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\victo\\.nuget\\packages\\microsoft.net.illink.tasks\\10.0.7\\microsoft.net.illink.tasks.10.0.7.nupkg.sha512",
+    "C:\\Users\\victo\\.nuget\\packages\\microsoft.netcore.app.runtime.linux-x64\\10.0.7\\microsoft.netcore.app.runtime.linux-x64.10.0.7.nupkg.sha512",
+    "C:\\Users\\victo\\.nuget\\packages\\microsoft.aspnetcore.app.runtime.linux-x64\\10.0.7\\microsoft.aspnetcore.app.runtime.linux-x64.10.0.7.nupkg.sha512",
+    "C:\\Users\\victo\\.nuget\\packages\\microsoft.netcore.app.host.linux-x64\\10.0.7\\microsoft.netcore.app.host.linux-x64.10.0.7.nupkg.sha512"
+  ],
+  "logs": []
+}
