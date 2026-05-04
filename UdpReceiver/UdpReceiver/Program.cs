@@ -691,10 +691,6 @@ namespace UdpReceiver
         {
             string ws = "ws://127.0.0.1:5000/ws";
 
-            //HttpListener listener = new();
-            //listener.Prefixes.Add(ws);
-            //listener.Start();
-
             try
             {
                 var server = new WebSocketServer(ws);
@@ -735,91 +731,8 @@ namespace UdpReceiver
 
             Console.WriteLine($"Listening on WebSocket { ws }");
 
-            //while (true)
-            //{
-            //    var context = await listener.GetContextAsync();
-
-            //    Console.WriteLine(context.Request.Url);
-
-            //    if (!context.Request.IsWebSocketRequest)
-            //    {
-            //        context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
-            //        context.Response.Close();
-            //        continue;
-            //    }
-
-            //    _ = HandleClient(context);
-            //}
         }
         
-        static async Task HandleClient(HttpListenerContext context)
-        {
-            var wsContext = await context.AcceptWebSocketAsync(null);
-            var socket = wsContext.WebSocket;
-
-            lock (clientsLock)
-            {
-                //clients.Add(socket);
-                Log($"Client connected (total = {clients.Count})");
-            }
-
-            // Receive loop (messages from the frontend).
-            var buffer = new byte[1024];
-
-            try
-            {
-                while (socket.State == WebSocketState.Open)
-                {
-                    var result = await socket.ReceiveAsync(
-                        new ArraySegment<byte>(buffer),
-                        CancellationToken.None
-                    );
-
-                    if (result.MessageType == WebSocketMessageType.Close)
-                        break;
-
-                    if (result.MessageType == WebSocketMessageType.Text)
-                    {
-                        string json = Encoding.UTF8.GetString(
-                            buffer,
-                            0,
-                            result.Count
-                        );
-
-#if DEBUG
-                        Log($"[WS RECEIVED] {json}");
-#endif
-
-                        using var doc = JsonDocument.Parse(json);
-
-                        var root = doc.RootElement;
-
-                        if (root.TryGetProperty("type", out var typeEl))
-                        {
-                            string? type = typeEl.GetString();
-
-                            if (type == "full_state")
-                            {
-                                //await SendFullState(socket);
-
-#if DEBUG
-                                Log($"[WS RESPONSE] Sent full-state to client.");
-#endif
-                            }
-                        }
-                    }
-                }
-            }
-            finally
-            {
-                lock (clientsLock)
-                {
-                    //clients.Remove(socket);
-                    Log($"Client disconnected (total = {clients.Count})");
-                }
-            }
-        }
-
         static async Task BroadcastLoop()
         {
             var buffer = new ArrayBufferWriter<byte>(4096);
