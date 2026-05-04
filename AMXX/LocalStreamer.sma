@@ -1429,7 +1429,9 @@ public send_snapshot()
 		temp = cs_get_user_deaths(i);
 		if (temp != prev_deaths[i]) {
 
-			if (prev_deaths[i] < temp) {
+			if (prev_deaths[i] < temp
+				|| temp == 0 ) { /*We already know it is different from previous value,
+								   so it being 0 means the round was reset.*/
 				// This means the player died since last snapshot.
 				death_pkt_sent[i] = false;
 			}

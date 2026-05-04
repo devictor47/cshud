@@ -5,7 +5,6 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
-using System.Net.WebSockets;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -638,6 +637,7 @@ namespace UdpReceiver
 
         static readonly List<IWebSocketConnection> clients = [];
         static readonly Lock clientsLock = new();
+        static readonly Lock playersLock = new();
 
         static async Task Main()
         {
@@ -646,7 +646,7 @@ namespace UdpReceiver
             var wsLoop = Task.Run(WebSocketServer);
             var bcLoop = Task.Run(BroadcastLoop);
 
-            await Task.WhenAll(udpLoop, delayedPktLoop);
+            await Task.WhenAll(udpLoop, delayedPktLoop, wsLoop, bcLoop);
         }
 
         static async Task GameServerListener()
@@ -691,46 +691,39 @@ namespace UdpReceiver
         {
             string ws = "ws://127.0.0.1:5000/ws";
 
-            try
+            var server = new WebSocketServer(ws);
+
+            server.Start(socket =>
             {
-                var server = new WebSocketServer(ws);
-
-                server.Start(socket =>
+                socket.OnOpen = () =>
                 {
-                    socket.OnOpen = () =>
+                    lock (clientsLock)
                     {
-                        lock (clientsLock)
-                        {
-                            clients.Add(socket);
-                            Log($"Client connected (total = {clients.Count})");
-                        }
-                    };
+                        clients.Add(socket);
+                        Log($"Client connected (total = {clients.Count})");
+                    }
+                };
 
-                    socket.OnClose = () =>
+                socket.OnClose = () =>
+                {
+                    lock (clientsLock)
                     {
-                        lock (clientsLock)
-                        {
-                            clients.Remove(socket);
-                            Log($"Client disconnected (total = {clients.Count})");
-                        }
-                    };
+                        clients.Remove(socket);
+                        Log($"Client disconnected (total = {clients.Count})");
+                    }
+                };
 
-                    socket.OnMessage = message =>
-                    {
-                        using var doc = JsonDocument.Parse(message);
-                        var root = doc.RootElement;
+                socket.OnMessage = message =>
+                {
+                    using var doc = JsonDocument.Parse(message);
+                    var root = doc.RootElement;
 
-                        if (root.TryGetProperty("type", out var typeEl) && typeEl.GetString() == "full_state")
-                            _ = SendFullState(socket);
-                    };
-                });
-            }
-            catch (Exception ex) { 
-                Console.WriteLine(ex.ToString());
-            }
+                    if (root.TryGetProperty("type", out var typeEl) && typeEl.GetString() == "full_state")
+                        _ = SendFullState(socket);
+                };
+            });
 
             Console.WriteLine($"Listening on WebSocket { ws }");
-
         }
         
         static async Task BroadcastLoop()
@@ -754,15 +747,14 @@ namespace UdpReceiver
                 if (clientsSnapshot.Count == 0)
                     continue;
 
-                var payload = buffer.WrittenMemory;
+                var payload = Encoding.UTF8.GetString(buffer.WrittenMemory.Span);
 
                 foreach (var ws in clientsSnapshot)
                 {
                     if (ws.IsAvailable)
                     {
-                        _ = ws.Send(
-                            Encoding.UTF8.GetString(payload.Span)
-                        ).ContinueWith(t =>
+                        _ = ws.Send(payload)
+                            .ContinueWith(t =>
                         {
                             if (t.IsFaulted || !ws.IsAvailable)
                             {
@@ -873,8 +865,8 @@ namespace UdpReceiver
                         break;
                 }
             }
-
-            ApplySnapshot(snapshot);
+            lock (playersLock)
+                ApplySnapshot(snapshot);
 
             channel.Writer.TryWrite(snapshot);
 
@@ -1391,7 +1383,6 @@ namespace UdpReceiver
             }
         }
 
-        
         static async Task SendFullState(IWebSocketConnection socket)
         {
             var buffer = new ArrayBufferWriter<byte>(8192);
@@ -1406,51 +1397,54 @@ namespace UdpReceiver
 
                 w.WriteStartArray();
 
-                for (int i = 1; i < players.Length; i++)
+                lock (playersLock)
                 {
-                    var p = players[i];
+                    for (int i = 1; i < players.Length; i++)
+                    {
+                        var p = players[i];
 
-                    if (p == null)
-                        continue;
+                        if (p == null)
+                            continue;
 
-                    w.WriteStartObject();
+                        w.WriteStartObject();
 
-                    w.WriteNumber("id", p.Id);
+                        w.WriteNumber("id", p.Id);
 
-                    w.WriteNumber("team", (byte)p.Team);
+                        w.WriteNumber("team", (byte)p.Team);
 
-                    w.WriteNumber("yaw", p.Yaw);
+                        w.WriteNumber("yaw", p.Yaw);
 
-                    w.WriteStartArray("pos");
-                    w.WriteNumberValue(p.X);
-                    w.WriteNumberValue(p.Y);
-                    w.WriteNumberValue(p.Z);
-                    w.WriteEndArray();
+                        w.WriteStartArray("pos");
+                        w.WriteNumberValue(p.X);
+                        w.WriteNumberValue(p.Y);
+                        w.WriteNumberValue(p.Z);
+                        w.WriteEndArray();
 
-                    w.WriteNumber("hp", p.Hp);
+                        w.WriteNumber("hp", p.Hp);
 
-                    w.WriteNumber("armorVal", p.ArmorValue);
-                    w.WriteNumber("armorType", (int)p.ArmorType);
+                        w.WriteNumber("armorVal", p.ArmorValue);
+                        w.WriteNumber("armorType", (int)p.ArmorType);
 
-                    w.WriteNumber("wep", (int)p.CurrentWeapon);
+                        w.WriteNumber("wep", (int)p.CurrentWeapon);
 
-                    w.WriteNumber("money", p.Money);
+                        w.WriteNumber("money", p.Money);
 
-                    w.WriteNumber("frags", p.Frags);
-                    w.WriteNumber("deaths", p.Deaths);
+                        w.WriteNumber("frags", p.Frags);
+                        w.WriteNumber("deaths", p.Deaths);
 
-                    w.WriteNumber("pwep", (int)p.PrimaryWeapon);
-                    w.WriteNumber("swep", (int)p.SecondaryWeapon);
-                    w.WriteNumber("gren", (int)p.Grenades);
-                    w.WriteBoolean("c4", p.HasC4);
+                        w.WriteNumber("pwep", (int)p.PrimaryWeapon);
+                        w.WriteNumber("swep", (int)p.SecondaryWeapon);
+                        w.WriteNumber("gren", (int)p.Grenades);
+                        w.WriteBoolean("c4", p.HasC4);
 
-                    w.WriteNumber("items", (byte)p.Items);
+                        w.WriteNumber("items", (byte)p.Items);
 
-                    w.WriteString("name", p.Name);
+                        w.WriteString("name", p.Name);
 
-                    w.WriteEndObject();
+                        w.WriteEndObject();
+                    }
+
                 }
-
                 w.WriteEndArray();
 
                 w.WriteEndObject();

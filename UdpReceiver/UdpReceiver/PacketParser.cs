@@ -257,7 +257,9 @@ namespace UdpReceiver
 
             if (size == 1)
             {
-                value = (T)(object)_data[_offset];
+                // value = (T)(object)_data[_offset];
+                byte v = _data[_offset++];
+                return Unsafe.As<byte, T>(ref v);
             }
             else if (size == 2)
             {
@@ -276,8 +278,8 @@ namespace UdpReceiver
                 throw new NotSupportedException();
             }
 
-            _offset += size;
-            return value;
+            //_offset += size;
+            //return value;
         }
 
     }
