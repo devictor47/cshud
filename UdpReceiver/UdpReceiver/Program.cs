@@ -639,6 +639,10 @@ namespace UdpReceiver
         static readonly Lock clientsLock = new();
         static readonly Lock playersLock = new();
 
+#if DEBUG
+        static readonly StreamWriter DebugLog = new("debug.log");
+#endif
+
         static async Task Main()
         {
             var udpLoop = Task.Run(GameServerListener);
@@ -660,7 +664,9 @@ namespace UdpReceiver
             while (true)
             {
                 var result = await udp.ReceiveAsync();
-
+#if DEBUG
+                //Console.WriteLine($"{DateTime.Now:HH:mm:ss} Packet arived ({result.Buffer.Length} bytes). Enqueueing...");
+#endif
                 queue.Enqueue(new DelayedPacket(
                     result.Buffer,
                     DateTime.UtcNow + delay
@@ -670,21 +676,36 @@ namespace UdpReceiver
 
         static async Task DelayedPacketProcessor()
         {
-            while (true)
+            try
             {
-                while (queue.TryPeek(out var pkt))
+                while (true)
                 {
-                    if (DateTime.UtcNow < pkt.SendAt)
-                        break;
-
-                    if (queue.TryDequeue(out pkt))
+                    while (queue.TryPeek(out var pkt))
                     {
-                        ProcessPacket(pkt.Data);
-                    }
-                }
+                        if (DateTime.UtcNow < pkt.SendAt)
+                            break;
 
-                await Task.Delay(1);
+                        if (queue.TryDequeue(out pkt))
+                        {
+                            ProcessPacket(pkt.Data);
+                        }
+                    }
+
+                    await Task.Delay(1);
+                }
             }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Console.WriteLine($"{DateTime.Now:HH:mm:ss} Error: {ex.Message} { ex }");
+                _ = Task.Run(DelayedPacketProcessor);
+#endif
+            }
+
+#if DEBUG
+            Console.WriteLine($"{DateTime.Now:HH:mm:ss} Broke out of delayer processor somehow...");
+#endif
+
         }
 
         static async Task WebSocketServer()
@@ -699,18 +720,32 @@ namespace UdpReceiver
                 {
                     lock (clientsLock)
                     {
+#if DEBUG
+                        Console.WriteLine($"{DateTime.Now:HH:mm:ss} Got clientsLock OnOpen");
+#endif
                         clients.Add(socket);
                         Log($"Client connected (total = {clients.Count})");
                     }
+
+#if DEBUG
+                    Console.WriteLine($"{DateTime.Now:HH:mm:ss} Released clientsLock");
+#endif
                 };
 
                 socket.OnClose = () =>
                 {
                     lock (clientsLock)
                     {
+#if DEBUG
+                        Console.WriteLine($"{DateTime.Now:HH:mm:ss} Got clientsLock OnClose");
+#endif
                         clients.Remove(socket);
                         Log($"Client disconnected (total = {clients.Count})");
                     }
+
+#if DEBUG
+                    Console.WriteLine($"{DateTime.Now:HH:mm:ss} Released clientsLock");
+#endif
                 };
 
                 socket.OnMessage = message =>
@@ -742,7 +777,16 @@ namespace UdpReceiver
 
                 List<IWebSocketConnection> clientsSnapshot;
                 lock (clientsLock)
+                {
                     clientsSnapshot = [.. clients];
+#if DEBUG
+                    Console.WriteLine($"{DateTime.Now:HH:mm:ss} Got clientsLock BroadcastLoop");
+#endif
+                }
+
+#if DEBUG
+                Console.WriteLine($"{DateTime.Now:HH:mm:ss} Released clientsLock");
+#endif
 
                 if (clientsSnapshot.Count == 0)
                     continue;
@@ -759,7 +803,16 @@ namespace UdpReceiver
                             if (t.IsFaulted || !ws.IsAvailable)
                             {
                                 lock (clientsLock)
+                                {
                                     clients.Remove(ws);
+#if DEBUG
+                                    Console.WriteLine($"{DateTime.Now:HH:mm:ss} Got clientsLock on ContinueWith");
+#endif
+                                }
+
+#if DEBUG
+                                Console.WriteLine($"{DateTime.Now:HH:mm:ss} Released clientsLock");
+#endif
 
 #if DEBUG
                                 Console.WriteLine($"Broadcast failed for ws. Client dropped.");
@@ -834,6 +887,10 @@ namespace UdpReceiver
             //  -BOMB_EXPLODED       = 1 byte (u8);
             //  -FLASHED             = 1 byte (u8);
             //  -KILL_FLASHBANGED    = 1 byte (u8);
+
+#if DEBUG
+            Console.WriteLine($"Processing packet of {data.Length} bytes...");
+#endif
 
             if (data.Length == 0) return;
 
