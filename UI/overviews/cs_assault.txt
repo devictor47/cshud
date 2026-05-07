@@ -1,14 +1,14 @@
-Assault - Hostage Rescue
-by CryptR (lmuur@dlc.fi)
+// overview description file for cs_assault.bsp
 
-Counter-Terrorists: Rescue the hostages. 
-Take out the Terrorists without jeopardizing 
-the hostages. The Terrorists may be watching
-you with their cameras.
+global 
+{
+	ZOOM	2.13
+	ORIGIN	-531 	1390	0
+	ROTATED	0
+}
 
-Terrorists: Prevent Counter-Terrorist
-force from rescuing the hostages. Use
-whatever force needed.
-
-Other Notes: There are 4 hostages in 
-the mission. Rescue them!
+layer 
+{
+	IMAGE	"overviews/cs_assault.bmp"
+	HEIGHT	0
+}
