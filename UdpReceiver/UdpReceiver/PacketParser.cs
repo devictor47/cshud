@@ -283,4 +283,48 @@ namespace UdpReceiver
         }
 
     }
+
+    internal class GlobalDelta
+    {
+        public GlobalFlags Flags = 0;
+
+        public float? RoundEndTick;
+        public byte? TScore;
+        public byte? CTScore;
+        public string? Map;
+    }
+
+    internal class PlayerDelta
+    {
+        public PlayerFlags Flags = 0;
+
+        public byte Id;
+
+        public Team? Team;
+        public float? Yaw;
+        public (short x, short y, short z)? Pos;
+        public sbyte? Hp;
+        public (ArmorType ArmorType, byte ArmorValue)? Armor;
+        public WeaponId? CurrentWeapon;
+        public ushort? Money;
+        public sbyte? Frags;
+        public byte? Deaths;
+
+        // --- Translated inventory ---
+        public WeaponId? PrimaryWeapon;
+        public WeaponId? SecondaryWeapon;
+        public Grenades? Grenades;
+        public bool? HasC4;
+
+        public ItemsHeld? Items;
+        public string? Name;
+
+        public bool? Dropped;
+
+        public bool HasInventory =>
+        PrimaryWeapon.HasValue &&
+        SecondaryWeapon.HasValue &&
+        Grenades.HasValue &&
+        HasC4.HasValue;
+    }
 }

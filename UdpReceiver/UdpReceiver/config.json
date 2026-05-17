@@ -1,0 +1,25 @@
+{
+  "servers": [
+    {
+      "ip": "127.0.0.1",
+      "port": 27045,
+      "delay": 0,
+      "tag": "localhost",
+      "enabled": true
+    },
+    {
+      "ip": "187.77.240.176",
+      "port": 27015,
+      "delay": 35,
+      "tag": "pugzao1000",
+      "enabled": true
+    },
+    {
+      "ip": "198.1.195.79",
+      "port": 27030,
+      "delay": 35,
+      "tag": "pugzao",
+      "enabled": true
+    }
+  ]
+}

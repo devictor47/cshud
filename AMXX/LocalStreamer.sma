@@ -5,7 +5,6 @@
 #include <cstrike>
 #include <engine>
 
-
 #define DEBUG 0
 #define FUNC_TRACE 0
 #define DEBUG_SNAPSHOT 0
@@ -230,6 +229,9 @@ new const g_event_size[] =
 	1, // EVT_KILL_FLASHBANGED
 };
 
+new sv_addr_str[22];
+new sv_addr[5];
+
 #if DEBUG_SNAPSHOT
 new g_dbg_buffer[2048];
 new g_dbg_buffer_len;
@@ -248,6 +250,31 @@ logdbg(message[], any: ...)
 #endif
 }
 
+// addr[] = 5 int array.
+parse_ipv4(const addr_str[], addr[])
+{
+    new octet = 0;
+    new str_idx = 0;
+    new addr_part = 0;
+
+    while (addr_str[str_idx])
+    {
+    	if (addr_str[str_idx] == '.'
+    		|| addr_str[str_idx] == ':') {
+
+    		addr[addr_part++] = octet;
+            octet = 0;
+    	}
+    	else {
+    		octet = octet * 10 + (addr_str[str_idx] - '0');
+    	}
+
+        str_idx++;
+    }
+
+    addr[addr_part] = octet;
+}
+
 public plugin_init()
 {
 	#if FUNC_TRACE
@@ -256,6 +283,9 @@ public plugin_init()
 	#endif
 
 	register_plugin("LocalStreamer", "1.0", "VictorOak");
+
+	get_user_ip(0, sv_addr_str, charsmax(sv_addr_str));
+	parse_ipv4(sv_addr_str, sv_addr);
 
 	// Send basic global info right away.
 	g_global_dirty = DF_MAP | DF_SCORE | DF_ROUND_TIME;
@@ -784,7 +814,6 @@ public send_packet(data[], length)
 	return send_success;
 }
 
-
 #if DEBUG_SNAPSHOT
 stock bool:append_dbf(const fmt[], any:...)
 {
@@ -1100,13 +1129,18 @@ public send_snapshot()
 	new len = 0;
 
 	// Important buffer logic variables.
-	new tick_idx, players_start_idx, player_idx, player_count_idx, flags_idx, flags, is_alive;
+	new sv_port_idx, tick_idx, players_start_idx, player_idx, player_count_idx, flags_idx, flags, is_alive;
 
 	// Aux to aaoid derreferencing expansive arrays.
 	new prev_x, prev_y, prev_z;
 
 	// Auxiliary, not context bound, variables.
 	new temp, temp2;
+
+	// Save 2 bytes for server port.
+	// IP will be recovered form senders address over at UDP receiver.
+	sv_port_idx = len;
+	len += 2;
 
 	// Where tick will live.
 	// Present in all sent packages.
@@ -1196,7 +1230,7 @@ public send_snapshot()
 				DF_DEATHS;
 
 			// Alive-only stats.
-			if (is_user_alive(i)) {
+			if (is_user_alive(i) || death_pkt_sent[i] == false) {
 				g_player_dirty[i] |=
 					DF_YAW |
 					DF_POS |
@@ -1429,9 +1463,7 @@ public send_snapshot()
 		temp = cs_get_user_deaths(i);
 		if (temp != prev_deaths[i]) {
 
-			if (prev_deaths[i] < temp
-				|| temp == 0 ) { /*We already know it is different from previous value,
-								   so it being 0 means the round was reset.*/
+			if (prev_deaths[i] < temp) {
 				// This means the player died since last snapshot.
 				death_pkt_sent[i] = false;
 			}
@@ -1506,7 +1538,11 @@ public send_snapshot()
 			//   vvv vvvv = armor value bits (7)
 			// [0000 0000]
 			//  ^-- = armor type bit (8th, being 1 = vesthelm, 0 = vest)
-			temp = cs_get_user_armor(i, CsArmorType:temp2);
+
+			// This check is necessary because upon dying the armor is NOT reset
+			// or removed, only when respawning the player, which means the UI
+			// will keep armor visible for dead players, so we force remove it here.
+			temp = is_alive ? cs_get_user_armor(i, temp2) : 0;
 			// If user armor has any value,
 			// then we use the 8th bit to
 			// set the armor type.
@@ -1514,7 +1550,10 @@ public send_snapshot()
 			// because you can't have "none" with a value
 			// greater than zero.
 			if (temp > 0 && CsArmorType:temp2 == CS_ARMOR_VESTHELM) {
-			temp |= (1 << 7);
+				// [x000 0000]
+				//   ^--------- 7 bits for value
+				//  ^---------- 8th bit for tpye (1 = vesthelm / 0 = vest)
+				temp |= (1 << 7);
 			}
 			// else no need to shift 0 by 7 bits (for CS_ARMOR_VEST),
 			// or armor value is 0 and nothing needs to be done either.
@@ -1612,6 +1651,7 @@ public send_snapshot()
 	// Only send if anything has be written after tick.
 	if (len > tick_idx + 4) {
 
+		write_u16(buffer, sv_port_idx, sv_addr[4]);
 		write_f32(buffer, tick_idx, tick_now);
 		send_packet(buffer, len);
 

@@ -1,838 +1,244 @@
-﻿
+﻿#define DEBUG_STAT
+
 using Fleck;
 using System.Buffers;
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Numerics;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Channels;
 
 namespace UdpReceiver
 {
-    [Flags]
-    enum GlobalFlags : byte
+    partial class Program
     {
-        ROUND_TIME = 1 << 0,
-        SCORE = 1 << 1,
-        MAP = 1 << 2
-    };
+        static volatile Dictionary<ulong, Server> AuthorizedServers = InitServers();
 
-    [Flags]
-    enum PlayerFlags : ushort
-    {
-        NONE = 0,
-
-        // Sent if dead or alive.
-        TEAM = 1 << 0,
-        NAME = 1 << 1,
-        MONEY = 1 << 2,
-        FRAGS = 1 << 3,
-        DEATHS = 1 << 4,
-
-        // Sent only if alive.
-        YAW = 1 << 5,
-        POS = 1 << 6,
-        HP = 1 << 7,
-        ARMOR = 1 << 8,
-        CURWEP = 1 << 9,
-        INV = 1 << 10,
-        ITEMS = 1 << 11,
-
-        DROPPED = 1 << 12
-    };
-
-    enum EventType : byte
-    {
-        ROUND_ENDED,
-        DIED, // killer, victim, assistant, weapon, rarity flags
-
-        BOMB_PLANTING,
-        BOMB_PLANT_ABORTED,
-        BOMB_PLANTED,
-
-        BOMB_DROPPED,
-        BOMB_PICKED_UP,
-
-        BOMB_DEFUSING,
-        BOMB_DEFUSE_ABORTED,
-
-        BOMB_DEFUSED,
-        BOMB_EXPLODED,
-
-        FLASHED, // EVENT_PLAYER_BLINDED_BY_FLASHBANG
-        KILL_FLASHBANGED
-    };
-
-    enum PacketType
-    {
-        PCKT_GLOBAL = 'G',
-        PCKT_PLAYERS = 'P',
-        PCKT_EVENTS = 'E'
-    }
-
-    // cssdk_const.inc
-    enum WeaponId
-    {
-        NONE,
-        P228,
-        GLOCK, // Actually not used in game. Glock18 is.
-        SCOUT,
-        HEGRENADE,
-        XM1014,
-        C4,
-        MAC10,
-        AUG,
-        SMOKEGRENADE,
-        ELITE,
-        FIVESEVEN,
-        UMP45,
-        SG550,
-        GALIL,
-        FAMAS,
-        USP,
-        GLOCK18,
-        AWP,
-        MP5N,
-        M249,
-        M3,
-        M4A1,
-        TMP,
-        G3SG1,
-        FLASHBANG,
-        DEAGLE,
-        SG552,
-        AK47,
-        KNIFE,
-        P90,
-        /*WEAPON_SHIELDGUN = 99*/ // Ignore shield. The game will give the pistol as the secondary.
-    };
-
-    enum WeaponSlot
-    {
-        None,
-        Primary,
-        Secondary,
-        Knife,
-        Grenade,
-        C4
-    }
-
-    [Flags]
-    enum Grenades
-    {
-        None = 0x00,
-        HE = 0x01,
-        FLASH = 0x02,
-        SMOKE = 0x04
-    }
-
-    enum ArmorType
-    {
-        Vest,
-        VestHelm,
-        None,
-    }
-
-    enum ItemsHeld
-    {
-        None,
-        Nightvision,
-        DefuseKit
-    }
-
-    enum Team
-    {
-        Unassigned,
-        Terrorist,
-        CT,
-        Spectator
-    }
-
-    enum WinStatus
-    {
-        NONE,
-        CTS,
-        TERRORISTS,
-        DRAW,
-    };
-
-    enum RoundEndReason
-    {
-        NONE,
-        TARGET_BOMB,
-        VIP_ESCAPED,
-        VIP_ASSASSINATED,
-        TERRORISTS_ESCAPED,
-        CTS_PREVENT_ESCAPE,
-        ESCAPING_TERRORISTS_NEUTRALIZED,
-        BOMB_DEFUSED,
-        CTS_WIN,
-        TERRORISTS_WIN,
-        END_DRAW,
-        ALL_HOSTAGES_RESCUED,
-        TARGET_SAVED,
-        HOSTAGE_NOT_RESCUED,
-        TERRORISTS_NOT_ESCAPED,
-        VIP_NOT_ESCAPED,
-        GAME_COMMENCE,
-        GAME_RESTART,
-        GAME_OVER
-    };
-
-    [Flags]
-    enum KillRarity
-    {
-        NONE = 0,
-        HEADSHOT = 0x001, // Headshot
-        KILLER_BLIND = 0x002, // Killer was blind
-        NOSCOPE = 0x004, // No-scope sniper rifle kill
-        PENETRATED = 0x008, // Penetrated kill (through walls)
-        THRUSMOKE = 0x010, // Smoke grenade penetration kill (bullets went through smoke)
-        ASSISTEDFLASH = 0x020, // Assister helped with a flash
-        DOMINATION_BEGAN = 0x040, // Killer player began dominating the victim (NOTE: this flag is set once)
-        DOMINATION = 0x080, // Continues domination by the killer
-        REVENGE = 0x100, // Revenge by the killer
-        INAIR = 0x200  // Killer was in the air (skill to deal with high inaccuracy)
-    };
-
-    class GlobalDelta
-    {
-        public GlobalFlags Flags = 0;
-
-        public float? RoundEndTick;
-        public byte? TScore;
-        public byte? CTScore;
-        public string? Map;
-    }
-
-    class PlayerDelta
-    {
-        public PlayerFlags Flags = 0;
-
-        public byte Id;
-
-        public Team? Team;
-        public float? Yaw;
-        public (short x, short y, short z)? Pos;
-        public sbyte? Hp;
-        public (ArmorType ArmorType, byte ArmorValue)? Armor;
-        public WeaponId? CurrentWeapon;
-        public ushort? Money;
-        public sbyte? Frags;
-        public byte? Deaths;
-
-        // --- Translated inventory ---
-        public WeaponId? PrimaryWeapon;
-        public WeaponId? SecondaryWeapon;
-        public Grenades? Grenades;
-        public bool? HasC4;
-
-        public ItemsHeld? Items;
-        public string? Name;
-
-        public bool? Dropped;
-
-        public bool HasInventory =>
-        PrimaryWeapon.HasValue &&
-        SecondaryWeapon.HasValue &&
-        Grenades.HasValue &&
-        HasC4.HasValue;
-    }
-
-    class PlayerState
-    {
-        public byte Id;
-
-        public Team Team;
-
-        // Position
-        public float Yaw;
-        public short X;
-        public short Y;
-        public short Z;
-
-        // Vital stats
-        public sbyte RawHp; // keep raw (can be negative)
-        public byte Deaths;
-        public sbyte Frags;
-
-        // Economy
-        public ushort Money;
-
-        // Equipment
-        public ArmorType ArmorType;
-        public byte ArmorValue;
-
-        public WeaponId CurrentWeapon;
-
-        // Inventory (normalized)
-        public WeaponId PrimaryWeapon;
-        public WeaponId SecondaryWeapon;
-        public Grenades Grenades;
-        public bool HasC4;
-        public ItemsHeld Items;
-
-        // Identity
-        public string Name = string.Empty;
-
-        // --- Convenience (computed, not stored) ---
-        public int Hp => Math.Max(0, (int)RawHp);
-
-        public PlayerState() : this(0) { }
-
-        public PlayerState(byte id)
-        {
-            Id = id;
-            Team = Team.Unassigned;
-            ArmorType = ArmorType.None;
-            ArmorValue = 0;
-            CurrentWeapon = WeaponId.NONE;
-            PrimaryWeapon = WeaponId.NONE;
-            SecondaryWeapon = WeaponId.NONE;
-            Grenades = Grenades.None;
-            HasC4 = false;
-            Items = ItemsHeld.None;
-            Name = string.Empty;
-        }
-
-        public void Apply(PlayerDelta d)
-        {
-            if (d.Id != Id)
-            {
-#if DEBUG
-                Debug.Fail($"Delta applied to wrong player ({d.Id} -> {Id})");
-#endif
-                return;
-            }
-
-            if (d.Team.HasValue) Team = d.Team.Value;
-
-            // --- Position ---
-            if (d.Yaw.HasValue) Yaw = d.Yaw.Value;
-            if (d.Pos.HasValue)
-            {
-                var p = d.Pos.Value;
-                X = p.x; Y = p.y; Z = p.z;
-            }
-
-            // --- Vital Stats ---
-            if (d.Hp.HasValue) RawHp = d.Hp.Value;
-            if (d.Frags.HasValue) Frags = d.Frags.Value;
-            if (d.Deaths.HasValue) Deaths = d.Deaths.Value;
-
-            // --- Economy ---
-            if (d.Money.HasValue) Money = d.Money.Value;
-
-            // --- Equipment ---
-            if (d.Armor.HasValue)
-            {
-                ArmorValue = d.Armor.Value.ArmorValue;
-                ArmorType = d.Armor.Value.ArmorType;
-            }
-
-            if (d.CurrentWeapon.HasValue) CurrentWeapon = d.CurrentWeapon.Value;
-
-            // --- Inventory ---
-            if (d.HasInventory)
-            {
-                PrimaryWeapon = d.PrimaryWeapon!.Value;
-                SecondaryWeapon = d.SecondaryWeapon!.Value;
-                Grenades = d.Grenades!.Value;
-                HasC4 = d.HasC4!.Value;
-            }
-#if DEBUG
-            else
-            {
-                if (d.PrimaryWeapon.HasValue ||
-                    d.SecondaryWeapon.HasValue ||
-                    d.Grenades.HasValue ||
-                    d.HasC4.HasValue)
-                {
-                    Debug.Fail("Partial inventory delta detected");
-                }
-            }
-#endif
-
-            if (d.Items.HasValue) Items = d.Items.Value;
-
-            // --- Identity ---
-            if (d.Name != null) Name = d.Name;
-        }
-
-        public override string ToString()
-        {
-            return $"Name: {Name}" +
-                $"\nTeam: {Team}" +
-                $"\nMoney: {Money}" +
-                $"\nHp: {Hp}" +
-                $"\nArmor: {ArmorType} ({ArmorValue})" +
-                $"\nCur Weapon: {CurrentWeapon}" +
-                $"\nPrimary: {PrimaryWeapon}" +
-                $"\nSecondary: {SecondaryWeapon}" +
-                $"\nGrenades: {Grenades}" +
-                $"\n{(Team == Team.Terrorist ? $"C4: {HasC4}" : $"Items: {Items}")}" +
-                $"\nFrags: {Frags}/{Deaths}" +
-                $"\nPosition: ({X},{Y},{Z})" +
-                $"\nYaw (H angle): {Yaw}" +
-                $"";
-        }
-    }
-
-    abstract class GameEvent
-    {
-        public EventType Type;
-    }
-
-    sealed class RoundEndedEvent : GameEvent
-    {
-        public WinStatus Status;
-        public RoundEndReason Reason;
-
-        public RoundEndedEvent()
-        {
-            Type = EventType.ROUND_ENDED;
-        }
-    }
-
-    sealed class DeathEvent : GameEvent
-    {
-        public byte KillerId;
-        public byte VictimId;
-        public byte? AssistantId;
-        public WeaponId Weapon;
-        public KillRarity? Rarity;
-
-        public DeathEvent()
-        {
-            Type = EventType.DIED;
-        }
-    }
-
-    class Snapshot
-    {
-        public float Tick;
-
-        public GlobalDelta? GlobalDelta;
-        public List<PlayerDelta>? PlayersDelta;
-        public List<GameEvent>? Events;
-
-    }
-
-    static class SnapshotJsonWriter
-    {
-        public static void Write(Utf8JsonWriter w, Snapshot snapshot)
-        {
-            w.WriteStartObject();
-
-            w.WriteNumber("tick", snapshot.Tick);
-
-            if (snapshot.GlobalDelta != null)
-                WriteGlobalDelta(w, snapshot.GlobalDelta);
-
-            if (snapshot.PlayersDelta != null && snapshot.PlayersDelta.Count > 0)
-                WritePlayersDelta(w, snapshot.PlayersDelta);
-
-            if (snapshot.Events != null && snapshot.Events.Count > 0)
-                WriteEvents(w, snapshot.Events);
-
-            w.WriteEndObject();
-        }
-
-        static void WriteGlobalDelta(Utf8JsonWriter w, GlobalDelta g)
-        {
-            w.WritePropertyName("global");
-            w.WriteStartObject();
-
-            var flags = g.Flags;
-
-            if ((flags & GlobalFlags.ROUND_TIME) != 0)
-                w.WriteNumber("rt", g.RoundEndTick!.Value);
-
-            if ((flags & GlobalFlags.SCORE) != 0)
-            {
-                w.WriteNumber("t", g.TScore!.Value);
-                w.WriteNumber("ct", g.CTScore!.Value);
-            }
-
-            if ((flags & GlobalFlags.MAP) != 0)
-                w.WriteString("map", g.Map);
-
-            w.WriteEndObject();
-        }
-
-        static void WritePlayersDelta(Utf8JsonWriter w, List<PlayerDelta> players)
-        {
-            w.WritePropertyName("players");
-            w.WriteStartArray();
-
-            foreach (var p in players)
-            {
-                w.WriteStartObject();
-
-                w.WriteNumber("id", p.Id);
-
-                var flags = p.Flags;
-
-                if ((flags & PlayerFlags.DROPPED) != 0)
-                {
-                    w.WriteBoolean("drop", true);
-                    w.WriteEndObject();
-                    continue;
-                }
-
-                if ((flags & PlayerFlags.TEAM) != 0)
-                    w.WriteNumber("team", (int)p.Team!.Value);
-
-                if ((flags & PlayerFlags.YAW) != 0)
-                    w.WriteNumber("yaw", p.Yaw!.Value);
-
-                if ((flags & PlayerFlags.POS) != 0)
-                {
-                    var pos = p.Pos!.Value;
-                    w.WriteStartArray("pos");
-                    w.WriteNumberValue(pos.x);
-                    w.WriteNumberValue(pos.y);
-                    w.WriteNumberValue(pos.z);
-                    w.WriteEndArray();
-                }
-
-                if ((flags & PlayerFlags.HP) != 0)
-                    w.WriteNumber("hp", p.Hp!.Value);
-
-                if ((flags & PlayerFlags.ARMOR) != 0)
-                {
-                    var a = p.Armor!.Value;
-                    w.WriteNumber("armorVal", a.ArmorValue);
-                    w.WriteNumber("armorType", (int)a.ArmorType);
-                }
-
-                if ((flags & PlayerFlags.CURWEP) != 0)
-                    w.WriteNumber("wep", (int)p.CurrentWeapon!.Value);
-
-                if ((flags & PlayerFlags.MONEY) != 0)
-                    w.WriteNumber("money", p.Money!.Value);
-
-                if ((flags & PlayerFlags.FRAGS) != 0)
-                    w.WriteNumber("frags", p.Frags!.Value);
-
-                if ((flags & PlayerFlags.DEATHS) != 0)
-                    w.WriteNumber("deaths", p.Deaths!.Value);
-
-                if ((flags & PlayerFlags.INV) != 0)
-                {
-                    w.WriteNumber("pwep", (int)p.PrimaryWeapon!.Value);
-                    w.WriteNumber("swep", (int)p.SecondaryWeapon!.Value);
-                    w.WriteNumber("gren", (int)p.Grenades!.Value);
-                    w.WriteBoolean("c4", p.HasC4!.Value);
-                }
-
-                if ((flags & PlayerFlags.ITEMS) != 0)
-                    w.WriteNumber("items", (int)p.Items!.Value);
-
-                if ((flags & PlayerFlags.NAME) != 0)
-                    w.WriteString("name", p.Name);
-
-                w.WriteEndObject();
-            }
-
-            w.WriteEndArray();
-        }
-
-        static void WriteEvents(Utf8JsonWriter w, List<GameEvent> events)
-        {
-            w.WritePropertyName("events");
-            w.WriteStartArray();
-
-            foreach (var e in events)
-            {
-                w.WriteStartObject();
-
-                w.WriteNumber("type", (int)e.Type);
-
-                switch (e)
-                {
-                    case DeathEvent d:
-                        w.WriteNumber("k", d.KillerId);
-                        w.WriteNumber("v", d.VictimId);
-
-                        if (d.AssistantId.HasValue)
-                            w.WriteNumber("a", d.AssistantId.Value);
-
-                        w.WriteNumber("w", (int)d.Weapon);
-
-                        if (d.Rarity.HasValue)
-                            w.WriteNumber("r", (int)d.Rarity.Value);
-
-                        break;
-
-                    case RoundEndedEvent r:
-                        w.WriteNumber("s", (int)r.Status);
-                        w.WriteNumber("r", (int)r.Reason);
-                        break;
-                }
-
-                w.WriteEndObject();
-            }
-
-            w.WriteEndArray();
-        }
-    }
-
-    record DelayedPacket(byte[] Data, DateTime SendAt);
-
-    class Program
-    {
-        const bool DEBUG_VERBOSE = false;
-
-        const int MAX_WEAPONS = 32 - 1; // Ignore shield.
-        public const int MAX_PLAYERS = 32;
-
-        // This array maps every weapon ID to a HUD slot
-        static readonly WeaponSlot[] WeaponsSlot =
-        [
-            WeaponSlot.None,
-        WeaponSlot.Secondary,   WeaponSlot.None,        WeaponSlot.Primary,
-        WeaponSlot.Grenade,     WeaponSlot.Primary,     WeaponSlot.C4,
-        WeaponSlot.Primary,     WeaponSlot.Primary,     WeaponSlot.Grenade,
-        WeaponSlot.Secondary,   WeaponSlot.Secondary,   WeaponSlot.Primary,
-        WeaponSlot.Primary,     WeaponSlot.Primary,     WeaponSlot.Primary,
-        WeaponSlot.Secondary,   WeaponSlot.Secondary,   WeaponSlot.Primary,
-        WeaponSlot.Primary,     WeaponSlot.Primary,     WeaponSlot.Primary,
-        WeaponSlot.Primary,     WeaponSlot.Primary,     WeaponSlot.Primary,
-        WeaponSlot.Grenade,     WeaponSlot.Secondary,   WeaponSlot.Primary,
-        WeaponSlot.Primary,     WeaponSlot.Knife,       WeaponSlot.Primary,
-        //WeaponSlot.Secondary // Ignore shield.
-    ];
-
-        static volatile float currentTick = 0;
-        static readonly PlayerState?[] players = new PlayerState[MAX_PLAYERS + 1];
-
-        static readonly Channel<Snapshot> channel =
-        Channel.CreateBounded<Snapshot>(new BoundedChannelOptions(32)
-        {
-            FullMode = BoundedChannelFullMode.DropOldest,
-            SingleReader = true,
-            SingleWriter = true
-        });
-
-        static void Log(string? message)
-        {
-            if (DEBUG_VERBOSE)
-            {
-                Console.WriteLine(message);
-            }
-        }
-
-
-        static readonly ConcurrentQueue<DelayedPacket> queue = new();
-        static readonly TimeSpan delay = TimeSpan.FromSeconds(
-            Environment.OSVersion.Platform == PlatformID.Unix
-            ? 30
-            : 0
-            );
-
-        static readonly List<IWebSocketConnection> clients = [];
-        static readonly Lock clientsLock = new();
-        static readonly Lock playersLock = new();
-
-#if DEBUG
-        static readonly StreamWriter DebugLog = new("debug.log");
-#endif
+        static readonly ConcurrentDictionary<IWebSocketConnection, ulong> ConnectedClients = new();
 
         static async Task Main()
         {
-            var udpLoop = Task.Run(GameServerListener);
-            var delayedPktLoop = Task.Run(DelayedPacketProcessor);
-            var wsLoop = Task.Run(WebSocketServer);
-            var bcLoop = Task.Run(BroadcastLoop);
+            var cts = new CancellationTokenSource();
 
-            await Task.WhenAll(udpLoop, delayedPktLoop, wsLoop, bcLoop);
+            // TODO - implement real time reload.
+            // This will require atomic config manipulation
+            // not simply swapping the references because this brakes
+            // the current references to each Server that is bring processed.
+            // Idea: add a ServerConfig to ServerContext and build this
+            // object and swap it on reload.
+            // For now, just restart the app after config.json changes.
+            //var cfgLoadTask = Task.Run(async () =>
+            //{
+            //    while (!cts.Token.IsCancellationRequested)
+            //    {
+            //        await Task.Delay(60 * 1000, cts.Token);
+            //        AuthorizedServers = InitServers();
+            //    }
+            //}, cts.Token);
+
+            var udpLoop = Task.Run(() =>
+            {
+                GameServerListener();
+            });
+
+            WebSocketServer();
+
+            await Task.WhenAll(udpLoop);
         }
 
-        static async Task GameServerListener()
+        static void GameServerListener()
         {
             int port = 37015;
-            using UdpClient udp = new(port);
-            Console.WriteLine($"Listening on UDP port {port}...");
 
-            IPEndPoint remoteEndPoint = new(IPAddress.Any, 0);
+            Socket socket = new(
+                AddressFamily.InterNetwork,
+                SocketType.Dgram,
+                ProtocolType.Udp);
+
+            socket.Bind(new IPEndPoint(IPAddress.Any, port));
+
+            Log($"==== INITIATING LOG SESSION ====");
+            Log($"Listening on UDP port {port}...");
+
+            EndPoint remote = new IPEndPoint(IPAddress.Any, 0);
+
+#if DEBUG_STAT
+            LogDebug($"==== INITIATING LOG ====");
+            LogDebug(
+                $"COUNT" +
+                $"\tRECEIVED" +
+                $"\tAVG" +
+                $"\tMIN" +
+                $"\tMAX" +
+                $"\t<=64" +
+                $"\t<=128" +
+                $"\t<=256" +
+                $"\t>256" +
+                $"\tPKT RCVD SINCE LAST"
+            );
+#endif
+
+            HashSet<ulong> serverProcessorStarted = new(AuthorizedServers.Count);
 
             while (true)
             {
-                var result = await udp.ReceiveAsync();
-#if DEBUG
-                //Console.WriteLine($"{DateTime.Now:HH:mm:ss} Packet arived ({result.Buffer.Length} bytes). Enqueueing...");
+                byte[] recvBuffer = ArrayPool<byte>.Shared.Rent(1024);
+
+                try
+                {
+                    int received = socket.ReceiveFrom(
+                        recvBuffer,
+                        SocketFlags.None,
+                        ref remote);
+
+                    // Make sure we have at least 2 bytes for the server port.
+                    if (received < 2)
+                    {
+                        ArrayPool<byte>.Shared.Return(recvBuffer);
+                        continue;
+                    }
+
+                    var ep = (IPEndPoint)remote;
+                    var svPort = BinaryPrimitives.ReadUInt16LittleEndian(recvBuffer);
+                    var svId = Server.BuildIdFromIPv4AndPort(ep.Address, svPort);
+
+                    if (!AuthorizedServers.TryGetValue(svId, out var server))
+                    {
+                        ArrayPool<byte>.Shared.Return(recvBuffer);
+                        Log($"IP not authorized: {ep.Address}");
+                        continue;
+                    }                    
+
+                    if (svPort != server.Port)
+                    {
+                        ArrayPool<byte>.Shared.Return(recvBuffer);
+                        Log($"Port does not match IP {ep.Address}:{svPort}. Expected: {server.Port}");
+                        continue;
+                    }
+
+#if DEBUG_STAT
+                    pcktsRcvd++;
+                    bytesRcvd += (uint)received;
+                    avgPcktSize = (float)bytesRcvd / pcktsRcvd;
+                    minPktSize = received < minPktSize ? (uint)received : minPktSize;
+                    maxPktSize = received > maxPktSize ? (uint)received : maxPktSize;
+
+                    if (received <= 64)
+                        h64++;
+                    else if (received <= 128)
+                        h128++;
+                    else if (received <= 256)
+                        h256++;
+                    else
+                        hUpper++;
+
+                    if (DateTime.UtcNow >= nextWriteAt)
+                    {
+                        LogDebug(
+                            $"{pcktsRcvd}" +
+                            $"\t{bytesRcvd}" +
+                            $"\t\t{avgPcktSize:F2}" +
+                            $"\t{minPktSize}" +
+                            $"\t{maxPktSize}" +
+                            $"\t{h64}" +
+                            $"\t{h128}" +
+                            $"\t{h256}" +
+                            $"\t{hUpper}" +
+                            $"\t{pcktsRcvd - pcktsRcvdPrev}"
+                        );
+
+                        pcktsRcvdPrev = pcktsRcvd;
+                        nextWriteAt = DateTime.UtcNow + writeInterval;
+                    }
 #endif
-                queue.Enqueue(new DelayedPacket(
-                    result.Buffer,
-                    DateTime.UtcNow + delay
-                ));
+
+                    server.Context.PacketQueue.Enqueue(
+                        new DelayedPacket
+                        {
+                            Buffer = recvBuffer,
+                            Length = received,
+                            SendAt = Time.NowPlusSeconds(server.BroadcastDelaySeconds + 10)
+                        });
+
+                    // Start processing after first packager arrives.
+                    if (!serverProcessorStarted.Contains(svId))
+                    {
+                        _ = Task.Run(async () => await ProcessServerQueue(server));
+                        serverProcessorStarted.Add(svId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    ArrayPool<byte>.Shared.Return(recvBuffer);
+                    LogErr(ex);
+                }
             }
         }
 
-        static async Task DelayedPacketProcessor()
+        static async Task ProcessServerQueue(Server server)
         {
-            try
-            {
-                while (true)
-                {
-                    while (queue.TryPeek(out var pkt))
-                    {
-                        if (DateTime.UtcNow < pkt.SendAt)
-                            break;
+            var queue = server.Context.PacketQueue;
 
-                        if (queue.TryDequeue(out pkt))
+            while (true)
+            {
+                try
+                {
+                    while (queue.TryPeek(out DelayedPacket pkt))
+                    {
+                        if (pkt.SendAt > Time.Now)
                         {
-                            ProcessPacket(pkt.Data);
+                            // Sleep until it's due.
+                            int delayMs = Math.Max(
+                                1,
+                                (int)((pkt.SendAt - Time.Now) * 1000 / Stopwatch.Frequency)
+                            );
+
+                            await Task.Delay(delayMs);
+
+                            continue;
+                        }
+
+                        queue.Advance();
+
+                        try
+                        {
+                            // Skip 2 bytes that are the server port.
+                            // The processor only expects state data.
+                            var snapshot = ProcessServerPacket(pkt.Buffer.AsSpan(0, pkt.Length), server);
+
+                            if (snapshot != null)
+                            {
+                                server.Context.State.ApplySnapshot(snapshot);
+                                _ = Broadcast(server, snapshot);
+                            }
+                        }
+                        finally
+                        {
+                            pkt.Release();
                         }
                     }
 
-                    await Task.Delay(1);
+                    // Queue is empty.
+                    await queue.AwaitPacket();
+
                 }
-            }
-            catch (Exception ex)
-            {
-#if DEBUG
-                Console.WriteLine($"{DateTime.Now:HH:mm:ss} Error: {ex.Message} { ex }");
-                _ = Task.Run(DelayedPacketProcessor);
-#endif
-            }
-
-#if DEBUG
-            Console.WriteLine($"{DateTime.Now:HH:mm:ss} Broke out of delayer processor somehow...");
-#endif
-
-        }
-
-        static async Task WebSocketServer()
-        {
-            string ws = "ws://127.0.0.1:5000/ws";
-
-            var server = new WebSocketServer(ws);
-
-            server.Start(socket =>
-            {
-                socket.OnOpen = () =>
+                catch (Exception ex)
                 {
-                    lock (clientsLock)
-                    {
-#if DEBUG
-                        Console.WriteLine($"{DateTime.Now:HH:mm:ss} Got clientsLock OnOpen");
-#endif
-                        clients.Add(socket);
-                        Log($"Client connected (total = {clients.Count})");
-                    }
-
-#if DEBUG
-                    Console.WriteLine($"{DateTime.Now:HH:mm:ss} Released clientsLock");
-#endif
-                };
-
-                socket.OnClose = () =>
-                {
-                    lock (clientsLock)
-                    {
-#if DEBUG
-                        Console.WriteLine($"{DateTime.Now:HH:mm:ss} Got clientsLock OnClose");
-#endif
-                        clients.Remove(socket);
-                        Log($"Client disconnected (total = {clients.Count})");
-                    }
-
-#if DEBUG
-                    Console.WriteLine($"{DateTime.Now:HH:mm:ss} Released clientsLock");
-#endif
-                };
-
-                socket.OnMessage = message =>
-                {
-                    using var doc = JsonDocument.Parse(message);
-                    var root = doc.RootElement;
-
-                    if (root.TryGetProperty("type", out var typeEl) && typeEl.GetString() == "full_state")
-                        _ = SendFullState(socket);
-                };
-            });
-
-            Console.WriteLine($"Listening on WebSocket { ws }");
-        }
-        
-        static async Task BroadcastLoop()
-        {
-            var buffer = new ArrayBufferWriter<byte>(4096);
-
-            await foreach (var snapshot in channel.Reader.ReadAllAsync())
-            {
-                buffer.Clear();
-
-                using (var writer = new Utf8JsonWriter(buffer))
-                {
-                    SnapshotJsonWriter.Write(writer, snapshot);
-                    writer.Flush();
-                }
-
-                List<IWebSocketConnection> clientsSnapshot;
-                lock (clientsLock)
-                {
-                    clientsSnapshot = [.. clients];
-#if DEBUG
-                    Console.WriteLine($"{DateTime.Now:HH:mm:ss} Got clientsLock BroadcastLoop");
-#endif
-                }
-
-#if DEBUG
-                Console.WriteLine($"{DateTime.Now:HH:mm:ss} Released clientsLock");
-#endif
-
-                if (clientsSnapshot.Count == 0)
-                    continue;
-
-                var payload = Encoding.UTF8.GetString(buffer.WrittenMemory.Span);
-
-                foreach (var ws in clientsSnapshot)
-                {
-                    if (ws.IsAvailable)
-                    {
-                        _ = ws.Send(payload)
-                            .ContinueWith(t =>
-                        {
-                            if (t.IsFaulted || !ws.IsAvailable)
-                            {
-                                lock (clientsLock)
-                                {
-                                    clients.Remove(ws);
-#if DEBUG
-                                    Console.WriteLine($"{DateTime.Now:HH:mm:ss} Got clientsLock on ContinueWith");
-#endif
-                                }
-
-#if DEBUG
-                                Console.WriteLine($"{DateTime.Now:HH:mm:ss} Released clientsLock");
-#endif
-
-#if DEBUG
-                                Console.WriteLine($"Broadcast failed for ws. Client dropped.");
-#endif
-                            }
-#if DEBUG
-                            else
-                            {
-                                Console.WriteLine($"Broadcast sent to client ...");
-                            }
-#endif
-                        });
-                    }
+                    LogErr(ex);
                 }
             }
         }
 
-        static void ProcessPacket(byte[] data)
+        static Snapshot? ProcessServerPacket(Span<byte> data, Server server)
         {
-            // Structure:
+            // General structure:
+            // [server port][game time][G][global flags][data][P][count][id][flags][data][E][count][type][data]
+            //
+            // [server port]
+            //  port: 2 bytes (u16);
             //
             // [game time]
             //   (optional) [G][global flags][data]
@@ -892,15 +298,18 @@ namespace UdpReceiver
             Console.WriteLine($"Processing packet of {data.Length} bytes...");
 #endif
 
-            if (data.Length == 0) return;
+            if (data.Length == 0) return null;
 
             var snapshot = new Snapshot();
 
-            var reader = new PacketReader(data);
-            currentTick = snapshot.Tick = reader.ReadF32();
+            // Skip the server port header
+            // as it has no use for us here.
+            var reader = new PacketReader(data[2..]);
+
+            snapshot.Tick = reader.ReadF32();
 
 #if DEBUG
-            Console.WriteLine($"=====<[TICK][{snapshot.Tick:F2}]>=====\n");
+            Console.WriteLine($"=====<[TICK][{snapshot.Tick:F2}][count: {pcktsRcvd} | avg size: {avgPcktSize:F2} | bytes rcvd: {bytesRcvd}]>=====\n");
 #endif
 
             while (reader.Remaining > 0)
@@ -914,7 +323,7 @@ namespace UdpReceiver
                         break;
 
                     case PacketType.PCKT_PLAYERS:
-                        snapshot.PlayersDelta = ProcessPlayersPacket(ref reader);
+                        snapshot.PlayersDelta = ProcessPlayersPacket(ref reader, server);
                         break;
 
                     case PacketType.PCKT_EVENTS:
@@ -922,14 +331,187 @@ namespace UdpReceiver
                         break;
                 }
             }
-            lock (playersLock)
-                ApplySnapshot(snapshot);
-
-            channel.Writer.TryWrite(snapshot);
 
 #if DEBUG
-            Console.WriteLine($"\n=====</[TICK][{snapshot.Tick:F2}]>=====");
+            Console.WriteLine($"=====</[TICK][{snapshot.Tick:F2}][count: {pcktsRcvd} | avg size: {avgPcktSize:F2} | bytes rcvd: {bytesRcvd}]>=====\n");
 #endif
+
+            return snapshot;
+        }
+
+        static async Task Broadcast(Server server, Snapshot snapshot)
+        {
+            var clients = server.Context.Clients;
+            int count = clients.Length;
+
+            var buffer = new ArrayBufferWriter<byte>(4096);
+            using (var writer = new Utf8JsonWriter(buffer))
+            {
+                Snapshot.JsonWriter.Write(writer, snapshot);
+                writer.Flush();
+            }
+
+            var payload = buffer.WrittenMemory.ToArray();
+
+            for (int i = 0; i < count; i++)
+            {
+                var ws = clients[i];
+
+                if (ws == null) continue;
+
+                if (!ws.IsAvailable)
+                {
+                    server.Context.RemoveClient(ws);
+                    continue;
+                }
+
+                _ = SendToClient(ws, payload, server.Context);
+            }
+        }
+
+        static async Task SendToClient(IWebSocketConnection ws, byte[] payload, ServerContext? context = null)
+        {
+            try
+            {
+                await ws.Send(payload);
+            }
+            catch (Exception ex)
+            {
+                context?.RemoveClient(ws);
+
+                Log(
+                    $"Broadcast failed for client " +
+                    $"{ws.ConnectionInfo.ClientIpAddress}:" +
+                    $"{ws.ConnectionInfo.ClientPort}. Dropping client..."
+                );
+
+                LogErr(ex);
+            }
+        }
+
+        static void WebSocketServer()
+        {
+            string ws = "ws://127.0.0.1:5000/ws";
+
+            var server = new WebSocketServer(ws);
+
+            server.Start(socket =>
+            {
+                socket.OnOpen = () =>
+                {
+                    Log($"WebScoket client {socket.ConnectionInfo.ClientIpAddress}:{socket.ConnectionInfo.ClientPort} started a connection.");
+                };
+
+                socket.OnClose = () =>
+                {
+                    ConnectedClients.TryRemove(socket, out var svId);
+                    AuthorizedServers[svId].Context.RemoveClient(socket);
+
+                    Log($"WebScoket client {socket.ConnectionInfo.ClientIpAddress}:{socket.ConnectionInfo.ClientPort} disconnected.");
+                };
+
+                socket.OnMessage = message =>
+                {
+                    using var doc = JsonDocument.Parse(message);
+                    var root = doc.RootElement;
+
+                    if (!root.TryGetProperty("type", out var typeEl))
+                    {
+                        _ = SendToClient(socket, WsJsonResponses.BadRequest);
+                        return;
+                    }
+                    var type = typeEl.GetString();
+
+                    if (string.IsNullOrWhiteSpace(type))
+                    {
+                        _ = SendToClient(socket, WsJsonResponses.BadRequest);
+                        return;
+                    }
+
+                    ulong svId;
+                    Server? server;
+
+                    switch (type)
+                    {
+                        case "full_state":
+
+                            Log($"WebScoket client {socket.ConnectionInfo.ClientIpAddress}:{socket.ConnectionInfo.ClientPort} requested full state");
+
+                            if (!ConnectedClients.TryGetValue(socket, out svId))
+                            {
+                                // TODO - upon connecting, the client immediately starts receiving eligible server deltas,
+                                // which means partial information. To avoid having half a state upon connection,
+                                // clients should request a "full_state".
+                                // One problem remains: there is a race condition between receiving full state
+                                // and partial deltas which may cause a brief rollback/inconsistent state. However, since packets
+                                // are sent fairly frequently, synchronizing this is not worth the overhead.
+                                _ = SendToClient(socket, WsJsonResponses.ClientNotSubscribed);
+                                return;
+                            }
+
+                            // This is defensive but should never happen because if a server
+                            // does not exist, then the client could not have been subcribed to it,
+                            // which means the check above would have failed.
+                            if (!AuthorizedServers.TryGetValue(svId, out server))
+                            {
+                                _ = SendToClient(socket, WsJsonResponses.Subscribe.Failed("server s not authorized"), server?.Context);
+                                Log($"[CRITICAL - SHOULD NEVER HAPPEN] WebSocket full_state request to a not registered server: {svId}");
+                                break;
+                            }
+
+                            var state = server.Context.State.SerializeFullState();
+                            _ = SendToClient(socket, state, server.Context);
+
+                            break;
+
+                        case "subscribe":
+
+                            if (!root.TryGetProperty("server", out var svEl)
+                            || !svEl.TryGetUInt64(out svId))
+                            {
+                                _ = SendToClient(socket, WsJsonResponses.BadRequest);
+                                break;
+                            }
+
+                            if (!AuthorizedServers.TryGetValue(svId, out server))
+                            {
+                                _ = SendToClient(socket, WsJsonResponses.Subscribe.Failed("server Is not authorized"), server?.Context);
+                                Log($"WebSocket connection to unregistered server attempted: {svId}");
+                                break;
+                            }
+
+                            if (ConnectedClients.TryGetValue(socket, out var currSvId))
+                            {
+                                // Already subscribed.
+                                if (currSvId == svId)
+                                {
+                                    // TODO - could the client not actually have been added to
+                                    // this server's client list?
+
+                                    // Still, we must alert the UI that we are good.
+                                    // Nothing else to be done.
+                                    _ = SendToClient(socket, WsJsonResponses.Subscribe.SubscribeSuccess, server.Context);
+                                    return;
+                                }
+
+                                // Remove client from current subscribed server.
+                                AuthorizedServers[currSvId].Context.RemoveClient(socket);
+                            }
+
+                            ConnectedClients[socket] = svId;
+                            server.Context.AddClient(socket);
+
+                            _ = SendToClient(socket, WsJsonResponses.Subscribe.SubscribeSuccess, server.Context);
+
+                            Log($"WebScoket client {socket.ConnectionInfo.ClientIpAddress}:{socket.ConnectionInfo.ClientPort} connected to server {svId}.");
+
+                            break;
+                    }
+
+                };
+            });
+
+            Log($"Listening on WebSocket {ws}...");
         }
 
         private static GlobalDelta ProcessGlobalPacket(ref PacketReader pReader)
@@ -1003,7 +585,7 @@ namespace UdpReceiver
             return delta;
         }
 
-        private static List<PlayerDelta> ProcessPlayersPacket(ref PacketReader pReader)
+        private static List<PlayerDelta> ProcessPlayersPacket(ref PacketReader pReader, Server server)
         {
             // [P] packet
             // [P][count][id][flags][data][id][flags][data][id][flags][data]...
@@ -1044,11 +626,16 @@ namespace UdpReceiver
                 delta.Flags = flags;
 
 #if DEBUG
-                var p = players[playerId];
-                string theName = p?.Name ?? "";
+                var p = server.Context.State.GetPlayer(playerId);
 
-                logStr.AppendLine($"  |--[id <{playerId}>{(theName.Length > 0 ? $" ({theName})" : $"")}]"
-                    + $"[flags:{flags}]");
+                if (p != null && !string.IsNullOrEmpty(p.Name))
+                {
+                    logStr.AppendLine($"  |--[id <{playerId}>({p.Name})][flags <{flags}>]");
+                }
+                else
+                {
+                    logStr.AppendLine($"  |--[id <{playerId}>][flags <{flags}>]");
+                }
 #endif
 
                 while (fReader.Next(out PlayerFlags flag))
@@ -1415,147 +1002,5 @@ namespace UdpReceiver
             return events;
         }
 
-        static void ApplySnapshot(Snapshot snapshot)
-        {
-            if (snapshot.PlayersDelta == null)
-                return;
-
-            foreach (var delta in snapshot.PlayersDelta)
-            {
-                if (delta.Dropped == true)
-                {
-                    players[delta.Id] = null;
-                    continue;
-                }
-
-                var player = players[delta.Id];
-
-                if (player == null)
-                {
-                    player = new PlayerState(delta.Id);
-                    players[delta.Id] = player;
-                }
-
-                player.Apply(delta);
-            }
-        }
-
-        static async Task SendFullState(IWebSocketConnection socket)
-        {
-            var buffer = new ArrayBufferWriter<byte>(8192);
-
-            using (var w = new Utf8JsonWriter(buffer))
-            {
-                w.WriteStartObject();
-
-                w.WriteNumber("tick", currentTick);
-
-                w.WritePropertyName("players");
-
-                w.WriteStartArray();
-
-                lock (playersLock)
-                {
-                    for (int i = 1; i < players.Length; i++)
-                    {
-                        var p = players[i];
-
-                        if (p == null)
-                            continue;
-
-                        w.WriteStartObject();
-
-                        w.WriteNumber("id", p.Id);
-
-                        w.WriteNumber("team", (byte)p.Team);
-
-                        w.WriteNumber("yaw", p.Yaw);
-
-                        w.WriteStartArray("pos");
-                        w.WriteNumberValue(p.X);
-                        w.WriteNumberValue(p.Y);
-                        w.WriteNumberValue(p.Z);
-                        w.WriteEndArray();
-
-                        w.WriteNumber("hp", p.Hp);
-
-                        w.WriteNumber("armorVal", p.ArmorValue);
-                        w.WriteNumber("armorType", (int)p.ArmorType);
-
-                        w.WriteNumber("wep", (int)p.CurrentWeapon);
-
-                        w.WriteNumber("money", p.Money);
-
-                        w.WriteNumber("frags", p.Frags);
-                        w.WriteNumber("deaths", p.Deaths);
-
-                        w.WriteNumber("pwep", (int)p.PrimaryWeapon);
-                        w.WriteNumber("swep", (int)p.SecondaryWeapon);
-                        w.WriteNumber("gren", (int)p.Grenades);
-                        w.WriteBoolean("c4", p.HasC4);
-
-                        w.WriteNumber("items", (byte)p.Items);
-
-                        w.WriteString("name", p.Name);
-
-                        w.WriteEndObject();
-                    }
-
-                }
-                w.WriteEndArray();
-
-                w.WriteEndObject();
-
-                w.Flush();
-            }
-
-            //await socket.SendAsync(
-            //    buffer.WrittenMemory,
-            //    WebSocketMessageType.Text,
-            //    endOfMessage: true,
-            //    CancellationToken.None
-            //);
-
-            await socket.Send(Encoding.UTF8.GetString(buffer.WrittenMemory.Span));
-        }
-
-        static string FlagsToString<T>(T flags) where T : struct, Enum
-        {
-            uint raw = Unsafe.SizeOf<T>() switch
-            {
-                1 => Unsafe.As<T, byte>(ref flags),
-                2 => Unsafe.As<T, ushort>(ref flags),
-                4 => Unsafe.As<T, uint>(ref flags),
-                _ => throw new NotSupportedException()
-            };
-
-            var values = Enum.GetValues<T>();
-            var sb = new StringBuilder();
-            bool first = true;
-
-            for (int i = 0; i < values.Length; i++)
-            {
-                var v = values[i];
-
-                uint mask = Unsafe.SizeOf<T>() switch
-                {
-                    1 => Unsafe.As<T, byte>(ref v),
-                    2 => Unsafe.As<T, ushort>(ref v),
-                    4 => Unsafe.As<T, uint>(ref v),
-                    _ => throw new NotSupportedException()
-                };
-
-                if ((raw & mask) != 0)
-                {
-                    if (!first)
-                        sb.Append('|');
-
-                    sb.Append(v.ToString());
-                    first = false;
-                }
-            }
-
-            return sb.ToString();
-        }
     }
 }
