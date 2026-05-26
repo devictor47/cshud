@@ -160,7 +160,7 @@ namespace UdpReceiver
                         {
                             Buffer = recvBuffer,
                             Length = received,
-                            SendAt = Time.NowPlusSeconds(server.BroadcastDelaySeconds + 10)
+                            SendAt = Time.NowPlusSeconds(server.BroadcastDelaySeconds)
                         });
 
                     // Start processing after first packager arrives.
@@ -404,10 +404,15 @@ namespace UdpReceiver
 
                 socket.OnClose = () =>
                 {
-                    ConnectedClients.TryRemove(socket, out var svId);
-                    AuthorizedServers[svId].Context.RemoveClient(socket);
-
-                    Log($"WebScoket client {socket.ConnectionInfo.ClientIpAddress}:{socket.ConnectionInfo.ClientPort} disconnected.");
+                    if (ConnectedClients.TryRemove(socket, out var svId))
+                    {
+                        AuthorizedServers[svId].Context.RemoveClient(socket);
+                        Log($"WebScoket client {socket.ConnectionInfo.ClientIpAddress}:{socket.ConnectionInfo.ClientPort} disconnected.");
+                    }
+                    else
+                    {
+                        Log($"WebScoket client {socket.ConnectionInfo.ClientIpAddress}:{socket.ConnectionInfo.ClientPort} disconnected but was not present in ConnectedClients somehow.");
+                    }
                 };
 
                 socket.OnMessage = message =>
@@ -625,12 +630,12 @@ namespace UdpReceiver
 
                 delta.Flags = flags;
 
-#if DEBUG
-                var p = server.Context.State.GetPlayer(playerId);
+                var playerState = server.Context.State.GetPlayer(playerId);
 
-                if (p != null && !string.IsNullOrEmpty(p.Name))
+#if DEBUG
+                if (playerState != null && !string.IsNullOrEmpty(playerState.Name))
                 {
-                    logStr.AppendLine($"  |--[id <{playerId}>({p.Name})][flags <{flags}>]");
+                    logStr.AppendLine($"  |--[id <{playerId}>({playerState.Name})][flags <{flags}>]");
                 }
                 else
                 {
@@ -754,9 +759,13 @@ namespace UdpReceiver
 
                             uint bitmask = pReader.ReadU32();
 
+                            // Prepare delta to reconstruct the
+                            // current game server state baseline,
+                            // so that we can compare it to local state
+                            // and see what has actually changed.
                             delta.PrimaryWeapon = WeaponId.NONE;
                             delta.SecondaryWeapon = WeaponId.NONE;
-                            delta.Grenades = Grenades.None;
+                            delta.HasHE = delta.HasFB = delta.HasSmoke = false;
                             delta.HasC4 = false;
 
 #if DEBUG
@@ -799,25 +808,27 @@ namespace UdpReceiver
                                 //                         will be the next possessed WP
                                 bitmask &= bitmask - 1;
 
-                                switch (WeaponsSlot[bitIdx])
+                                var wpId = (WeaponId)bitIdx;
+
+                                switch (WeaponsSlot[(int)wpId])
                                 {
                                     case WeaponSlot.Primary:
-                                        delta.PrimaryWeapon = (WeaponId)bitIdx;
+                                        delta.PrimaryWeapon = wpId;
                                         break;
                                     case WeaponSlot.Secondary:
-                                        delta.SecondaryWeapon = (WeaponId)bitIdx;
+                                        delta.SecondaryWeapon = wpId;
                                         break;
                                     case WeaponSlot.Grenade:
-                                        switch ((WeaponId)bitIdx)
+                                        switch (wpId)
                                         {
                                             case WeaponId.HEGRENADE:
-                                                delta.Grenades |= Grenades.HE;
+                                                delta.HasHE = true;
                                                 break;
                                             case WeaponId.FLASHBANG:
-                                                delta.Grenades |= Grenades.FLASH;
+                                                delta.HasFB = true;
                                                 break;
                                             case WeaponId.SMOKEGRENADE:
-                                                delta.Grenades |= Grenades.SMOKE;
+                                                delta.HasSmoke = true;
                                                 break;
                                         }
                                         break;
@@ -827,15 +838,51 @@ namespace UdpReceiver
                                 }
                             }
 
+                            // Remove things that did not actually change from delta.
+                            // This is done after the loop because the engine
+                            // only sends what weapons the user has, not the ones
+                            // they had or dropped, which means we must start from
+                            // a "has nothing" state, parse the whole inventory,
+                            // and then compare if anything actually changed.
+                            if (playerState != null)
+                            {
+                                if (playerState.PrimaryWeapon == delta.PrimaryWeapon)
+                                    delta.PrimaryWeapon = null;
+
+                                if (playerState.SecondaryWeapon == delta.SecondaryWeapon)
+                                    delta.SecondaryWeapon = null;
+
+                                if (playerState.HasHE == delta.HasHE)
+                                    delta.HasHE = null;
+
+                                if (playerState.HasFB == delta.HasFB)
+                                    delta.HasFB = null;
+
+                                if (playerState.HasSmoke == delta.HasSmoke)
+                                    delta.HasSmoke = null;
+
+                                if (playerState.HasC4 == delta.HasC4)
+                                    delta.HasC4 = null;
+                            }
+
                             break;
 
                         case PlayerFlags.ITEMS:
 
-                            bool hasKit = pReader.ReadU8() == 1;
-                            delta.Items = hasKit ? ItemsHeld.DefuseKit : ItemsHeld.None;
+                            var items = (ItemsHeld)pReader.ReadU8();
+                            delta.HasDefuseKit = (items & ItemsHeld.DefuseKit) != 0;
+                            delta.HasNightvision = (items & ItemsHeld.Nightvision) != 0;
 
+                            if (playerState != null)
+                            {
+                                if (playerState.HasDefuseKit == delta.HasDefuseKit)
+                                    delta.HasDefuseKit = null;
+
+                                if (playerState.HasNightvision == delta.HasNightvision)
+                                    delta.HasNightvision = null;
+                            }
 #if DEBUG
-                            logStr.AppendLine($"    |--[ITEMS <{(hasKit ? "has defuse" : "no defuse")}>]");
+                            logStr.AppendLine($"    |--[ITEMS {(items.HasFlag(ItemsHeld.DefuseKit) ? "<kit>" : "")} {(items.HasFlag(ItemsHeld.Nightvision) ? "<nvg>" : "")}]");
 #endif
                             break;
 

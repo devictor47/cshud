@@ -112,15 +112,6 @@ namespace UdpReceiver
         C4
     }
 
-    [Flags]
-    enum Grenades
-    {
-        None = 0x00,
-        HE = 0x01,
-        FLASH = 0x02,
-        SMOKE = 0x04
-    }
-
     enum ArmorType
     {
         Vest,
@@ -128,11 +119,12 @@ namespace UdpReceiver
         None,
     }
 
+    [Flags]
     enum ItemsHeld
     {
         None,
+        DefuseKit,
         Nightvision,
-        DefuseKit
     }
 
     enum Team

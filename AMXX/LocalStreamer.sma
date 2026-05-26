@@ -262,8 +262,8 @@ parse_ipv4(const addr_str[], addr[])
     	if (addr_str[str_idx] == '.'
     		|| addr_str[str_idx] == ':') {
 
-    		addr[addr_part++] = octet;
-            octet = 0;
+			addr[addr_part++] = octet;
+			octet = 0;
     	}
     	else {
     		octet = octet * 10 + (addr_str[str_idx] - '0');
@@ -1593,15 +1593,21 @@ public send_snapshot()
 			}
 
 			// ITEMS PACKET: [x] (1 byte)
-			// Not using NVG for now.
+			// Bit 0: kit
+			// Bit 1: nvg
+			// [0000 0000]
+			//         |^---- if set, has kit
+			//         ^----- if set, has nightvision
 			temp = cs_get_user_defuse(i);
+			temp2 = cs_get_user_nvg(i);
+			temp = temp | (temp2 << 1);
 			if (temp != prev_items[i]) {
 				prev_items[i] = temp;
 				buffer[len++] = temp;
 				flags |= _:DF_ITEMS;
 
 				#if DEBUG_SNAPSHOT
-				dbg_bf_len += formatex(dbg_bf[dbg_bf_len], charsmax(dbg_bf) - dbg_bf_len, "[ITEMS/KIT <%d>]", temp);
+				dbg_bf_len += formatex(dbg_bf[dbg_bf_len], charsmax(dbg_bf) - dbg_bf_len, "[ITEMS/KIT <%d> NVG <%d>]", temp, temp2);
 				#endif
 			}
 

@@ -3,6 +3,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Net.NetworkInformation;
 using System.Text;
 using System.Text.Json;
 
@@ -129,10 +130,12 @@ namespace UdpReceiver
 
                         w.WriteNumber("pwep", (int)p.PrimaryWeapon);
                         w.WriteNumber("swep", (int)p.SecondaryWeapon);
-                        w.WriteNumber("gren", (int)p.Grenades);
+                        w.WriteBoolean("he", p.HasHE);
+                        w.WriteBoolean("fb", p.HasFB);
+                        w.WriteBoolean("smk", p.HasSmoke);
                         w.WriteBoolean("c4", p.HasC4);
-
-                        w.WriteNumber("items", (byte)p.Items);
+                        w.WriteBoolean("kit", p.HasDefuseKit);
+                        w.WriteBoolean("nvg", p.HasNightvision);
 
                         w.WriteString("name", p.Name);
 
@@ -191,9 +194,12 @@ namespace UdpReceiver
         // Inventory (normalized)
         public WeaponId PrimaryWeapon;
         public WeaponId SecondaryWeapon;
-        public Grenades Grenades;
+        public bool HasHE;
+        public bool HasFB;
+        public bool HasSmoke;
         public bool HasC4;
-        public ItemsHeld Items;
+        public bool HasDefuseKit;
+        public bool HasNightvision;
 
         // Identity
         public string Name = string.Empty;
@@ -201,9 +207,7 @@ namespace UdpReceiver
         // --- Convenience (computed, not stored) ---
         public int Hp => Math.Max(0, (int)RawHp);
 
-        public PlayerState() : this(0) { }
-
-        public PlayerState(byte id)
+        public PlayerState(byte id = 0)
         {
             Id = id;
             Team = Team.Unassigned;
@@ -212,9 +216,12 @@ namespace UdpReceiver
             CurrentWeapon = WeaponId.NONE;
             PrimaryWeapon = WeaponId.NONE;
             SecondaryWeapon = WeaponId.NONE;
-            Grenades = Grenades.None;
+            HasHE = false;
+            HasFB = false;
+            HasSmoke = false;
             HasC4 = false;
-            Items = ItemsHeld.None;
+            HasDefuseKit = false;
+            HasNightvision = false;
             Name = string.Empty;
         }
 
@@ -241,9 +248,12 @@ namespace UdpReceiver
 
             PrimaryWeapon = other.PrimaryWeapon;
             SecondaryWeapon = other.SecondaryWeapon;
-            Grenades = other.Grenades;
+            HasHE = other.HasHE;
+            HasFB = other.HasFB;
+            HasSmoke = other.HasSmoke;
             HasC4 = other.HasC4;
-            Items = other.Items;
+            HasDefuseKit = other.HasDefuseKit;
+            HasNightvision = other.HasNightvision;
 
             Name = other.Name; // string reference copy is fine
         }
@@ -258,10 +268,13 @@ namespace UdpReceiver
                 return;
             }
 
-            if (d.Team.HasValue) Team = d.Team.Value;
+            if (d.Team.HasValue)
+                Team = d.Team.Value;
 
             // --- Position ---
-            if (d.Yaw.HasValue) Yaw = d.Yaw.Value;
+            if (d.Yaw.HasValue)
+                Yaw = d.Yaw.Value;
+
             if (d.Pos.HasValue)
             {
                 var p = d.Pos.Value;
@@ -269,12 +282,18 @@ namespace UdpReceiver
             }
 
             // --- Vital Stats ---
-            if (d.Hp.HasValue) RawHp = d.Hp.Value;
-            if (d.Frags.HasValue) Frags = d.Frags.Value;
-            if (d.Deaths.HasValue) Deaths = d.Deaths.Value;
+            if (d.Hp.HasValue) 
+                RawHp = d.Hp.Value;
+
+            if (d.Frags.HasValue) 
+                Frags = d.Frags.Value;
+
+            if (d.Deaths.HasValue)
+                Deaths = d.Deaths.Value;
 
             // --- Economy ---
-            if (d.Money.HasValue) Money = d.Money.Value;
+            if (d.Money.HasValue)
+                Money = d.Money.Value;
 
             // --- Equipment ---
             if (d.Armor.HasValue)
@@ -283,33 +302,39 @@ namespace UdpReceiver
                 ArmorType = d.Armor.Value.ArmorType;
             }
 
-            if (d.CurrentWeapon.HasValue) CurrentWeapon = d.CurrentWeapon.Value;
+            if (d.CurrentWeapon.HasValue)
+                CurrentWeapon = d.CurrentWeapon.Value;
 
             // --- Inventory ---
-            if (d.HasInventory)
-            {
-                PrimaryWeapon = d.PrimaryWeapon!.Value;
-                SecondaryWeapon = d.SecondaryWeapon!.Value;
-                Grenades = d.Grenades!.Value;
-                HasC4 = d.HasC4!.Value;
-            }
-#if DEBUG
-            else
-            {
-                if (d.PrimaryWeapon.HasValue ||
-                    d.SecondaryWeapon.HasValue ||
-                    d.Grenades.HasValue ||
-                    d.HasC4.HasValue)
-                {
-                    Debug.Fail("Partial inventory delta detected");
-                }
-            }
-#endif
+            if (d.PrimaryWeapon.HasValue)
+                PrimaryWeapon = d.PrimaryWeapon.Value;
 
-            if (d.Items.HasValue) Items = d.Items.Value;
+            if (d.SecondaryWeapon.HasValue)
+                SecondaryWeapon = d.SecondaryWeapon.Value;
+
+            if (d.HasHE.HasValue)
+                HasHE = d.HasHE.Value;
+
+            if (d.HasFB.HasValue)
+                HasFB = d.HasFB.Value;
+
+            if (d.HasSmoke.HasValue)
+                HasSmoke = d.HasSmoke.Value;
+
+            if (d.HasC4.HasValue)    
+                HasC4 = d.HasC4.Value;
+
+            // --- Items ---
+            if (d.HasDefuseKit.HasValue)
+                HasDefuseKit = d.HasDefuseKit.Value;
+
+            if (d.HasNightvision.HasValue)
+                HasNightvision = d.HasNightvision.Value;
+
 
             // --- Identity ---
-            if (d.Name != null) Name = d.Name;
+            if (d.Name != null)
+                Name = d.Name;
         }
 
         public override string ToString()
@@ -322,8 +347,8 @@ namespace UdpReceiver
                 $"\nCur Weapon: {CurrentWeapon}" +
                 $"\nPrimary: {PrimaryWeapon}" +
                 $"\nSecondary: {SecondaryWeapon}" +
-                $"\nGrenades: {Grenades}" +
-                $"\n{(Team == Team.Terrorist ? $"C4: {HasC4}" : $"Items: {Items}")}" +
+                $"\nGrenades: HE <{HasHE}> FB <{HasFB}> Smoke <{HasSmoke}>" +
+                $"\nItems: {(Team == Team.Terrorist ? $"C4 <{HasC4}>" : $"Kit <{HasDefuseKit}>")} NVG <{HasNightvision}>" +
                 $"\nFrags: {Frags}/{Deaths}" +
                 $"\nPosition: ({X},{Y},{Z})" +
                 $"\nYaw (H angle): {Yaw}" +
@@ -381,18 +406,18 @@ namespace UdpReceiver
                 w.WriteEndObject();
             }
 
-            static void WritePlayersDelta(Utf8JsonWriter w, List<PlayerDelta> players)
+            static void WritePlayersDelta(Utf8JsonWriter w, List<PlayerDelta> playersDeltas)
             {
                 w.WritePropertyName("players");
                 w.WriteStartArray();
 
-                foreach (var p in players)
+                foreach (var pDelta in playersDeltas)
                 {
                     w.WriteStartObject();
 
-                    w.WriteNumber("id", p.Id);
+                    w.WriteNumber("id", pDelta.Id);
 
-                    var flags = p.Flags;
+                    var flags = pDelta.Flags;
 
                     if ((flags & PlayerFlags.DROPPED) != 0)
                     {
@@ -402,14 +427,14 @@ namespace UdpReceiver
                     }
 
                     if ((flags & PlayerFlags.TEAM) != 0)
-                        w.WriteNumber("team", (int)p.Team!.Value);
+                        w.WriteNumber("team", (int)pDelta.Team!.Value);
 
                     if ((flags & PlayerFlags.YAW) != 0)
-                        w.WriteNumber("yaw", p.Yaw!.Value);
+                        w.WriteNumber("yaw", pDelta.Yaw!.Value);
 
                     if ((flags & PlayerFlags.POS) != 0)
                     {
-                        var pos = p.Pos!.Value;
+                        var pos = pDelta.Pos!.Value;
                         w.WriteStartArray("pos");
                         w.WriteNumberValue(pos.x);
                         w.WriteNumberValue(pos.y);
@@ -418,40 +443,59 @@ namespace UdpReceiver
                     }
 
                     if ((flags & PlayerFlags.HP) != 0)
-                        w.WriteNumber("hp", p.Hp!.Value);
+                        w.WriteNumber("hp", pDelta.Hp!.Value);
 
                     if ((flags & PlayerFlags.ARMOR) != 0)
                     {
-                        var a = p.Armor!.Value;
+                        var a = pDelta.Armor!.Value;
                         w.WriteNumber("armorVal", a.ArmorValue);
                         w.WriteNumber("armorType", (int)a.ArmorType);
                     }
 
                     if ((flags & PlayerFlags.CURWEP) != 0)
-                        w.WriteNumber("wep", (int)p.CurrentWeapon!.Value);
+                        w.WriteNumber("wep", (int)pDelta.CurrentWeapon!.Value);
 
                     if ((flags & PlayerFlags.MONEY) != 0)
-                        w.WriteNumber("money", p.Money!.Value);
+                        w.WriteNumber("money", pDelta.Money!.Value);
 
                     if ((flags & PlayerFlags.FRAGS) != 0)
-                        w.WriteNumber("frags", p.Frags!.Value);
+                        w.WriteNumber("frags", pDelta.Frags!.Value);
 
                     if ((flags & PlayerFlags.DEATHS) != 0)
-                        w.WriteNumber("deaths", p.Deaths!.Value);
+                        w.WriteNumber("deaths", pDelta.Deaths!.Value);
 
                     if ((flags & PlayerFlags.INV) != 0)
                     {
-                        w.WriteNumber("pwep", (int)p.PrimaryWeapon!.Value);
-                        w.WriteNumber("swep", (int)p.SecondaryWeapon!.Value);
-                        w.WriteNumber("gren", (int)p.Grenades!.Value);
-                        w.WriteBoolean("c4", p.HasC4!.Value);
+                        if (pDelta.PrimaryWeapon.HasValue)
+                            w.WriteNumber("pwep", (int)pDelta.PrimaryWeapon.Value);
+
+                        if (pDelta.SecondaryWeapon.HasValue)
+                            w.WriteNumber("swep", (int)pDelta.SecondaryWeapon.Value);
+
+                        if (pDelta.HasHE.HasValue)
+                            w.WriteBoolean("he", pDelta.HasHE.Value);
+
+                        if (pDelta.HasFB.HasValue)
+                            w.WriteBoolean("fb", pDelta.HasFB.Value);
+
+                        if (pDelta.HasSmoke.HasValue)
+                            w.WriteBoolean("smk", pDelta.HasSmoke.Value); ;
+
+                        if (pDelta.HasC4.HasValue)
+                            w.WriteBoolean("c4", pDelta.HasC4.Value);
                     }
 
                     if ((flags & PlayerFlags.ITEMS) != 0)
-                        w.WriteNumber("items", (int)p.Items!.Value);
+                    {
+                        if (pDelta.HasDefuseKit.HasValue)
+                            w.WriteBoolean("kit", pDelta.HasDefuseKit.Value);
+
+                        if (pDelta.HasNightvision.HasValue)
+                            w.WriteBoolean("nvg", pDelta.HasNightvision.Value);
+                    }
 
                     if ((flags & PlayerFlags.NAME) != 0)
-                        w.WriteString("name", p.Name);
+                        w.WriteString("name", pDelta.Name);
 
                     w.WriteEndObject();
                 }

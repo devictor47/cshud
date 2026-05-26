@@ -313,18 +313,15 @@ namespace UdpReceiver
         // --- Translated inventory ---
         public WeaponId? PrimaryWeapon;
         public WeaponId? SecondaryWeapon;
-        public Grenades? Grenades;
+        public bool? HasHE;
+        public bool? HasFB;
+        public bool? HasSmoke;
         public bool? HasC4;
+        public bool? HasDefuseKit;
+        public bool? HasNightvision;
 
-        public ItemsHeld? Items;
         public string? Name;
 
         public bool? Dropped;
-
-        public bool HasInventory =>
-        PrimaryWeapon.HasValue &&
-        SecondaryWeapon.HasValue &&
-        Grenades.HasValue &&
-        HasC4.HasValue;
     }
 }
