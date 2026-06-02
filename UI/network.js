@@ -11,7 +11,6 @@ const Network = (() => {
     const RECONNECT_DELAY_MS = 2000;
 
     let socket = null;
-    let serverId = null;
 
     const textDecoder = new TextDecoder();
 
@@ -28,41 +27,18 @@ const Network = (() => {
         listeners.get(event).push(callback);
     }
 
-    function getServerId() {
-        const params = new URLSearchParams(window.location.search);
-        const raw = params.get("sv");
-        const id = Number(raw);
-
-        if (!raw || !Number.isFinite(id) || id <= 0) {
-            console.warn("[WS] No valid server id in URL params.");
-            return null;
-        }
-
-        return id;
-    }
-
     function send(payload) {
         if (socket?.readyState === WebSocket.OPEN)
             socket.send(JSON.stringify(payload));
     }
 
     function connect() {
-        serverId = getServerId();
-
-        if (serverId === null)
-            return;
 
         socket = new WebSocket(WS_URL);
         socket.binaryType = "arraybuffer";
 
         socket.onopen = () => {
-            
             emit("connected");
-
-            send({
-                type: "subscribe",
-                server: serverId
-            }); 
         };
 
         socket.onmessage = (event) => {
@@ -76,8 +52,13 @@ const Network = (() => {
 
                 //Logger.log("[WS] Received data", data);
                 
+                if (data.servers) {
+                    emit("servers", data.servers);
+                    return;
+                }
+
                 if (data.subscribe === "success") {
-                    emit("subscribed", serverId);
+                    emit("subscribed", data.id);
                     return;
                 }
 
@@ -108,7 +89,7 @@ const Network = (() => {
         };
 
         socket.onclose = () => {
-            console.warn(`[WS] Disconnected from server ${serverId}.`);
+            console.warn(`[WS] Disconnected from server.`);
 
             emit("disconnected");
 

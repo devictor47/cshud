@@ -5,12 +5,12 @@ window.RadarUI = (() => {
     const DEG_TO_RAD = Math.PI / 180; // yaw conversion
 
     const mapCanvas = DOM.radar.mapCanvasEl;
-    const playersCanvas = DOM.radar.playersCanvasEl;
+    const entitiesCanvas = DOM.radar.entitiesCanvasEl;
 
     const mapCtx = mapCanvas.getContext("2d");
     mapCtx.imageSmoothingEnabled = false;
 
-    const playersCtx = playersCanvas.getContext("2d");
+    const entitiesCtx = entitiesCanvas.getContext("2d");
 
     const camera = {
         x: 0,
@@ -36,6 +36,7 @@ window.RadarUI = (() => {
         textsWidth: Object.create(null),
         updateCache (cameraZoom) {
             const invZoom = 1/cameraZoom;
+            this.circleRadius = 7 * invZoom;
             this.fontSize = 11 * invZoom;
             this.font = `bold ${11 * invZoom}px Segoe UI`;
             this.outerStrokeWidth = 4 * invZoom;
@@ -46,27 +47,68 @@ window.RadarUI = (() => {
         }
     };
 
+    const drawC4Cache = {
+        c4Image: new Image(),
+        c4PlantedImage: new Image(),
+        baseWidth: 16,
+        baseHeight: 21,
+        scaleFactor: 0.7,
+        width: 16*0.7,
+        height: 21*0.7,
+        c4X: (16*0.7)/2,
+        c4Y: (21*0.7)/2,
+        updateCache (cameraZoom) {
+            const invZoom = 1/cameraZoom;
+            this.width = this.baseWidth * this.scaleFactor * invZoom;
+            this.height = this.baseHeight * this.scaleFactor * invZoom;
+            this.c4X = this.width * 0.5;
+            this.c4Y = this.height * 0.5;
+        }
+    };
+
+    const drawC4PlantedCache = {
+        c4Image: new Image(),
+        baseWidth: 424,
+        baseHeight: 178,
+        scaleFactor: 0.07,
+        width: 424*0.07,
+        height: 178*0.07,
+        c4X: (424*0.07)/2,
+        c4Y: (178*0.07)/2,
+        updateCache (cameraZoom) {
+            const invZoom = 1/cameraZoom;
+            this.width = this.baseWidth * this.scaleFactor * invZoom;
+            this.height = this.baseHeight * this.scaleFactor * invZoom;
+            this.c4X = this.width * 0.5;
+            this.c4Y = this.height * 0.5;
+        }
+    };
+
+    drawC4Cache.c4Image.src = Consts.OVERVIEW_ICONS.C4.src;
+    drawC4PlantedCache.c4Image.src = Consts.OVERVIEW_ICONS.C4_PLANTED.src;
+
     const renderState = new Map();
 
     // Flag to indicate if we need to fully redraw canvases
     // due to zoom/pan changes or new overview.
-    let dirty = false; 
+    let mapCanvasDirty = false; 
+    let c4dropped = null;
 
-    let overview = null;   
+    let overview = null;
 
     function setOverview(overview_) {
         overview = overview_;
-        dirty = true;
+        mapCanvasDirty = true;
     }
 
     function redraw(force = false) {
 
         if (force)
-            dirty = true;
+            mapCanvasDirty = true;
 
-        if (!dirty) return;
+        if (!mapCanvasDirty) return;
 
-        dirty = false;
+        mapCanvasDirty = false;
 
         if (!overview) return;
 
@@ -77,13 +119,13 @@ window.RadarUI = (() => {
         if (mapCanvas.width !== rect.width || mapCanvas.height !== rect.height) {
             mapCanvas.width = rect.width;
             mapCanvas.height = rect.height;
-            playersCanvas.width = rect.width;
-            playersCanvas.height = rect.height;
+            entitiesCanvas.width = rect.width;
+            entitiesCanvas.height = rect.height;
         }
         else {
             // Reset transforms.
             mapCtx.setTransform(1, 0, 0, 1, 0, 0);
-            playersCtx.setTransform(1, 0, 0, 1, 0, 0);
+            entitiesCtx.setTransform(1, 0, 0, 1, 0, 0);
         }
 
         // Clear everything on both canvases.
@@ -141,18 +183,19 @@ window.RadarUI = (() => {
         }
 
         drawPlayerCache.updateCache(camera.zoom);
+        drawC4Cache.updateCache(camera.zoom);
     }
 
     function drawPlayers(players, timeSinceLast) {
-
+        
         // Clear the canvas.
-        playersCtx.clearRect(0, 0, playersCanvas.width, playersCanvas.height);
+        entitiesCtx.clearRect(0, 0, entitiesCanvas.width, entitiesCanvas.height);
 
         // Save current transformations.
-        playersCtx.save();
+        entitiesCtx.save();
 
-        playersCtx.translate(camera.x, camera.y);
-        playersCtx.scale(camera.zoom, camera.zoom);
+        entitiesCtx.translate(camera.x, camera.y);
+        entitiesCtx.scale(camera.zoom, camera.zoom);
 
         // Adjust lerp factor to 60 fps.
         // timeSinceLast * 60 gives how many frames
@@ -185,7 +228,43 @@ window.RadarUI = (() => {
             drawPlayer(player);
         });
 
-        playersCtx.restore();
+        // c4dropped is only set to null
+        // when a player has it, in which
+        // case it will be drawn inside DrawPlayer.
+        if (c4dropped !== null) {
+            entitiesCtx.globalAlpha = 1.0;
+            const pos = worldToCanvas(c4dropped.x, c4dropped.y);
+
+            if (c4dropped.planted) {
+                entitiesCtx.drawImage(
+                    drawC4PlantedCache.c4Image,
+                    pos.x-drawC4PlantedCache.c4X,
+                    pos.y-drawC4PlantedCache.c4Y,
+                    drawC4PlantedCache.width,
+                    drawC4PlantedCache.height
+                );
+
+                const blink =
+                    Math.floor(performance.now() / 300) % 2 === 0;
+
+                if (blink) {
+                    entitiesCtx.beginPath();
+                    entitiesCtx.arc(pos.x, pos.y, 3, 0, Math.PI * 2);
+                    entitiesCtx.fillStyle = "red";
+                    entitiesCtx.fill();
+                }
+            } else {
+                entitiesCtx.drawImage(
+                    drawC4Cache.c4Image,
+                    pos.x-drawC4Cache.c4X,
+                    pos.y-drawC4Cache.c4Y,
+                    drawC4Cache.width,
+                    drawC4Cache.height
+                );
+            }
+        }
+
+        entitiesCtx.restore();
     }
 
     function drawPlayer(player) {
@@ -243,21 +322,18 @@ window.RadarUI = (() => {
         let r =  drawPlayerCache.circleRadius * scaleMult; // * jumpMult;
 
         if (player.isDead) {
-            playersCtx.globalAlpha = 0.60;
+            entitiesCtx.globalAlpha = 0.60;
             // TODO - consider introducint a timestamp cache
             // to remove dead players from the map after a while.
         }
         else {
-            playersCtx.globalAlpha = 1.0;
-        }
+            entitiesCtx.globalAlpha = 1.0;
 
-        // Player vision cone.
-        if (!player.isDead) {
-
+            // Player vision cone.
             playerRenderState.renderYaw = lerpAngle(playerRenderState.renderYaw, player.yaw, lerpFactor);
 
-            playersCtx.save();
-            playersCtx.translate(pos.x, pos.y);
+            entitiesCtx.save();
+            entitiesCtx.translate(pos.x, pos.y);
 
             // Converte Graus para Radianos
             // No CS 1.6, v_angle[1] = 0 costuma ser o eixo X (Direita)
@@ -268,66 +344,67 @@ window.RadarUI = (() => {
             // Rotacionamos o contexto
             // IMPORTANTE: O sinal de negativo depende se o seu sistema Y do Canvas 
             // está invertido em relação ao jogo (o que geralmente está).
-            playersCtx.rotate(-angleRad - offset);
+            entitiesCtx.rotate(-angleRad - offset);
 
             // Desenha o Cone (Triângulo ou Arco)
             const coneLen = r * 5; // Comprimento do cone
             const fov = 0.785398;  // Abertura do cone em radianos (45 graus)
 
-            const grad = playersCtx.createRadialGradient(0, 0, r, 0, 0, coneLen);
+            const grad = entitiesCtx.createRadialGradient(0, 0, r, 0, 0, coneLen);
             grad.addColorStop(0, player.team === 2 ? 'rgba(1, 110, 208, 1)' : 'rgba(255, 143, 0, 1)');
             grad.addColorStop(1, player.team === 2 ? 'rgba(1, 110, 208, 0.15)' : 'rgba(255, 143, 0, 0.15)');
 
-            playersCtx.beginPath();
-            playersCtx.moveTo(0, 0);
-            playersCtx.arc(0, 0, coneLen, -fov, fov);
-            playersCtx.closePath();
-            playersCtx.fillStyle = grad;
-            playersCtx.fill();
-            playersCtx.strokeStyle = `rgba(255, 255, 255, 0.5)`; // Branca semi-transparente
-            playersCtx.lineWidth = drawPlayerCache.coneLineWidth; // Espessura constante independente do zoom
-            playersCtx.lineJoin = "round"; // Bordas arredondadas nos cantos
-            playersCtx.stroke();
+            entitiesCtx.beginPath();
+            entitiesCtx.moveTo(0, 0);
+            entitiesCtx.arc(0, 0, coneLen, -fov, fov);
+            entitiesCtx.closePath();
+            entitiesCtx.fillStyle = grad;
+            entitiesCtx.fill();
+            entitiesCtx.strokeStyle = `rgba(255, 255, 255, 0.5)`; // Branca semi-transparente
+            entitiesCtx.lineWidth = drawPlayerCache.coneLineWidth; // Espessura constante independente do zoom
+            entitiesCtx.lineJoin = "round"; // Bordas arredondadas nos cantos
+            entitiesCtx.stroke();
 
-            playersCtx.restore();
+            entitiesCtx.restore();
         }
 
         // Player circle.
         // Keep size constant regardless of zoom by dividing by it.
-        playersCtx.beginPath();
-        playersCtx.arc(pos.x, pos.y, r, 0, TAU);
-        playersCtx.fillStyle = player.isDead
+        entitiesCtx.beginPath();
+        entitiesCtx.arc(pos.x, pos.y, r, 0, TAU);
+        entitiesCtx.fillStyle = player.isDead
             ? '#666'
             : player.team === 2
                 ? '#016ed0'
                 : '#ff8f00';
 
         // TODO - Maybe add extra effects depending on hp, etc.
-        playersCtx.fill();
+        entitiesCtx.fill();
 
         // Outer black stroke
-        playersCtx.strokeStyle = "black";
-        playersCtx.lineWidth = drawPlayerCache.outerStrokeWidth;
-        playersCtx.stroke();
+        entitiesCtx.strokeStyle = "black";
+        entitiesCtx.lineWidth = drawPlayerCache.outerStrokeWidth;
+        entitiesCtx.stroke();
 
         // White stroke between the two
-        playersCtx.strokeStyle = "white";
-        playersCtx.lineWidth = drawPlayerCache.whiteStrokeWidth;
-        playersCtx.stroke();
+        entitiesCtx.strokeStyle = "white";
+        entitiesCtx.lineWidth = drawPlayerCache.whiteStrokeWidth;
+        entitiesCtx.stroke();
 
+        
         // Drawing name.
         // Adjust font size based on zoom to
         // keep it readable and consistent.
         const fontSize = drawPlayerCache.fontSize;
 
-        playersCtx.font = drawPlayerCache.font;
-        playersCtx.lineJoin = "round";
+        entitiesCtx.font = drawPlayerCache.font;
+        entitiesCtx.lineJoin = "round";
 
         const padding = drawPlayerCache.textPadding;
         const offsetY = r + drawPlayerCache.textOffsetY;
 
         // Measure text
-        const textWidth = getTextWidthAtDefaultZoom(playersCtx, player.name) / camera.zoom;
+        const textWidth = getTextWidthAtDefaultZoom(entitiesCtx, player.name) / camera.zoom;
         const textHeight = fontSize;
 
         // Preferred position above the player
@@ -341,8 +418,8 @@ window.RadarUI = (() => {
         }
 
         // // 2. Clamp vertically (bottom edge safety)
-        if (textY > playersCanvas.height - padding) {
-            textY = playersCanvas.height - padding;
+        if (textY > entitiesCanvas.height - padding) {
+            textY = entitiesCanvas.height - padding;
         }
 
         // 3. Horizontal clamping + dynamic alignment
@@ -350,25 +427,35 @@ window.RadarUI = (() => {
         let right = textX + textWidth / 2;
 
         if (left < padding) {
-            playersCtx.textAlign = "left";
+            entitiesCtx.textAlign = "left";
             textX = padding;
         }
-        else if (right > playersCanvas.width - padding) {
-            playersCtx.textAlign = "right";
-            textX = playersCanvas.width - padding;
+        else if (right > entitiesCanvas.width - padding) {
+            entitiesCtx.textAlign = "right";
+            textX = entitiesCanvas.width - padding;
         }
         else {
-            playersCtx.textAlign = "center";
+            entitiesCtx.textAlign = "center";
         }
 
-        playersCtx.strokeStyle = "black";
-        playersCtx.lineWidth = drawPlayerCache.whiteStrokeWidth;
-        playersCtx.lineJoin = "round";
-        playersCtx.strokeText(player.name, textX, textY);
+        entitiesCtx.strokeStyle = "black";
+        entitiesCtx.lineWidth = drawPlayerCache.whiteStrokeWidth;
+        entitiesCtx.lineJoin = "round";
+        entitiesCtx.strokeText(player.name, textX, textY);
 
-        playersCtx.fillStyle = "white";
-        playersCtx.fillText(player.name, textX, textY);
+        entitiesCtx.fillStyle = "white";
+        entitiesCtx.fillText(player.name, textX, textY);
 
+        if (player.hasC4) {
+            entitiesCtx.globalAlpha = 1.0;
+            entitiesCtx.drawImage(
+                drawC4Cache.c4Image,
+                pos.x-drawC4Cache.c4X,
+                pos.y-drawC4Cache.c4Y,
+                drawC4Cache.width,
+                drawC4Cache.height);
+            c4dropped = null;
+        }
     }
 
     function worldToCanvas(playerX, playerY) {
@@ -381,7 +468,7 @@ window.RadarUI = (() => {
         const origin = overview.text.origin;
 
         // Forced on a 4:3 on CSS to match the game, originally.
-        const aspect = playersCanvas.width / playersCanvas.height;
+        const aspect = entitiesCanvas.width / entitiesCanvas.height;
 
         const viewWidth = worldSize / zoom;
 
@@ -402,8 +489,8 @@ window.RadarUI = (() => {
         }
 
         return {
-            x: (nx + 0.5) * playersCanvas.width,
-            y: (ny + 0.5) * playersCanvas.height
+            x: (nx + 0.5) * entitiesCanvas.width,
+            y: (ny + 0.5) * entitiesCanvas.height
         };
     }
 
@@ -437,7 +524,7 @@ window.RadarUI = (() => {
     ///////////////////////////
 
     const observer = new ResizeObserver(() => {
-        dirty = true;
+        mapCanvasDirty = true;
     });
 
     function zoomOnWheel(e) {
@@ -546,12 +633,12 @@ window.RadarUI = (() => {
     mapCanvas.parentElement.addEventListener("wheel",
         (e) => {
             if (zoomOnWheel(e))
-                dirty = true;
+                mapCanvasDirty = true;
     });
 
     mapCanvas.parentElement.addEventListener("mousemove",  (e) => {
             if (panCanvas(e))
-                dirty = true;
+                mapCanvasDirty = true;
     });
 
     mapCanvas.parentElement.addEventListener("mousedown", grabCanvas);
@@ -562,6 +649,9 @@ window.RadarUI = (() => {
     return {
         setOverview,
         redraw,
-        drawPlayers
+        drawPlayers,
+        c4DroppedAt: (x, y, z, planted = false) => {
+            c4dropped = {x, y, z, planted};
+        }
     }
 })();

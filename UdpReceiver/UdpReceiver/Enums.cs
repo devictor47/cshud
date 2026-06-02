@@ -39,7 +39,6 @@ namespace UdpReceiver
     enum EventType : byte
     {
         ROUND_ENDED,
-        DIED, // killer, victim, assistant, weapon, rarity flags
 
         BOMB_PLANTING,
         BOMB_PLANT_ABORTED,
@@ -55,7 +54,8 @@ namespace UdpReceiver
         BOMB_EXPLODED,
 
         FLASHED, // EVENT_PLAYER_BLINDED_BY_FLASHBANG
-        KILL_FLASHBANGED
+
+        DIED, // killer, victim, assistant, weapon, rarity flags
     };
 
     enum PacketType

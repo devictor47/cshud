@@ -4,7 +4,14 @@
       "ip": "127.0.0.1",
       "port": 27045,
       "delay": 0,
-      "tag": "localhost",
+      "tag": "localhost 27045",
+      "enabled": true
+    },
+    {
+      "ip": "127.0.0.1",
+      "port": 27015,
+      "delay": 0,
+      "tag": "localhost 27015",
       "enabled": true
     },
     {

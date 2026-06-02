@@ -203,3 +203,4 @@ C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\obj\Rel
 C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\obj\Release\net10.0\linux-x64\ref\UdpReceiver.dll
 C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\bin\Release\net10.0\linux-x64\Fleck.dll
 C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\obj\Release\net10.0\linux-x64\UdpReceiver.csproj.AssemblyReference.cache
+C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\bin\Release\net10.0\linux-x64\config.json

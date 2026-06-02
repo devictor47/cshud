@@ -5,6 +5,7 @@
 #include <cstrike>
 #include <engine>
 
+#define LOCALDEV 0
 #define DEBUG 0
 #define FUNC_TRACE 0
 #define DEBUG_SNAPSHOT 0
@@ -69,10 +70,13 @@ new const g_global_flags_names[][] = {
 };
 
 new const g_global_events_names[][] = {
-	"ROUND ENDED", "PL DIED",
-	"BOMB PLANTING", "EVT_BOMB_PLANT_ABORTED", "BOMB PLANTED",
+	"ROUND ENDED",
+	"BOMB PLANTING", "BOMB PLANT ABORTED", "BOMB PLANTED",
 	"BOMB DROPPED", "BOMB PICKED UP",
-	"EVT_BOMB_DEFUSING", "EVT_BOMB_DEFUSE_ABORTED"
+	"BOMB DEFUSING", "BOMB DEFUSE ABORTED",
+	"BOMB DEFUSED", "BOMB EXPLODED",
+	"PL BLINDED",
+	"PL DIED",
 };
 #endif
 
@@ -142,7 +146,6 @@ enum SnapshotPlayerFlags
 enum EventType
 {
 	EVT_ROUND_ENDED,
-	EVT_DIED, // killer, victim, weapon, flashed?
 
 	EVT_BOMB_PLANTING,
 	EVT_BOMB_PLANT_ABORTED,
@@ -157,14 +160,13 @@ enum EventType
 	EVT_BOMB_DEFUSED,
 	EVT_BOMB_EXPLODED,
 
-	EVT_FLASHED, // EVENT_PLAYER_BLINDED_BY_FLASHBANG
-	EVT_KILL_FLASHBANGED,
+	EVT_FLASHED,
 
-	EVT_PLAYER_JOINED,
-	EVT_PLAYER_DROPPED
+	EVT_DIED, // killer, victim, weapon, flashed?
 }
 
 new g_socket; // The socket.
+new g_handlers_attached = false;
 
 // Map name and name length.
 // This is basically free and set
@@ -199,22 +201,23 @@ new Float:g_round_end_time;
 new g_t_score, g_ct_score,
 bool:g_planting_bomb, bool:g_bomb_planted, bool:g_defusing_bomb,
 bool:g_bomb_is_on_ground;
+new g_current_c4_holder = 0, Float:g_c4_exp_time = 0.0;
 
 // These hold what has changed in global state
 // and data per player so we know what to send for each one.
 new SnapshotPlayerFlags:g_player_dirty[33];
 new SnapshotGlobalFlags:g_global_dirty;
 
+// + 1 to hold the event type.
 new g_events[MAX_EVENTS][1 + EVT_MAX_DATA];
 new g_event_count;
 new const g_event_size[] =
 {
 	1, // EVT_ROUND_ENDED
-	4, // EVT_DIED
 
 	1, // EVT_BOMB_PLANTING
 	1, // EVT_BOMB_PLANT_ABORTED
-	1, // EVT_BOMB_PLANTED
+	8, // EVT_BOMB_PLANTED
 
 	8, // EVT_BOMB_DROPPED
 	1, // EVT_BOMB_PICKED_UP
@@ -223,10 +226,11 @@ new const g_event_size[] =
 	1, // EVT_BOMB_DEFUSE_ABORTED
 
 	1, // EVT_BOMB_DEFUSED
-	1, // EVT_BOMB_EXPLODED
+	2, // EVT_BOMB_EXPLODED
 
-	1, // EVT_FLASHED
-	1, // EVT_KILL_FLASHBANGED
+	8, // EVT_FLASHED
+
+	4 // EVT_DIED
 };
 
 new sv_addr_str[22];
@@ -625,68 +629,136 @@ public bar_time_msg(msg_id, msg_dest, id)
 	}
 }
 
-// register_message
-public bomb_drop_msg(msg_id, msg_dest, id)
+// RegisterHookChain
+// "bomb_planted" is auto-hooked by csx, but their
+// function does not send the coordinates, and we want
+// the coordinates, hence the extended name.
+public bomb_planted_reapi(const id, Float:where[3], Float:vel[3])
 {
 	#if FUNC_TRACE
-	log_msg_fnc("bomb_drop_msg", msg_id, msg_dest, id);
+	log_amx("bomb_planted_reapi(id<%d>, where<%.02f,%.02f,%.02f>)",
+		id, where[0], where[1], where[2]);
 	#endif
 
-	new drop_type = get_msg_arg_int(4);
-
-	if (drop_type == 1) {
-		// Fired before the BarTime message.
-		g_bomb_planted = true;
-
-		push_event(EVT_BOMB_PLANTED, id);
-
-		#if DEBUG
-		log_amx("BOMB PLANTED");
-		#endif
-	}
-	else {
-
-		if (g_bomb_is_on_ground)
-			return;
-
-		g_bomb_is_on_ground = true;
-
-		new drop_x = floatround(get_msg_arg_float(1));
-		new drop_y = floatround(get_msg_arg_float(2));
-		new drop_z = floatround(get_msg_arg_float(3));
-
-		// For this event, we need 6 bits for the id (1 to 32)
-		// and another 6 bytes (48 bits) for x, y and z,
-		// totaling 54 bits, which requires a minimum
-		// of 7 bytes (2 cells).
-		// first cell: [0000 0000][xxxx xxxx][xxxx xxxx][0000 0000]
-		//                                                 ^-- up to 6th bit, id; from the second byte/8th bit onwards, we store the X coord. Still 1 byte left.
-		push_event(EVT_BOMB_DROPPED, (id) | ((drop_x) << 8), (drop_y) | ((drop_z) << 16));
-
-		#if DEBUG
-		log_amx("BOMB DROPPED");
-		#endif
-	}
-}
-
-// register_message
-public bomb_pickup_msg(msg_id, msg_dest, id)
-{
-	#if FUNC_TRACE
-	log_msg_fnc("bomb_pickup_msg", msg_id, msg_dest, id);
-	#endif
-
-	if (msg_dest != MSG_ONE) {
-		// log_amx("BOMB PICKUP != MSG_ONE: %d", msg_dest);
+	if (g_bomb_planted) {
+		log_amx("bomb planted called with  g_bomb_planted already set");
 		return;
 	}
-	
-	g_bomb_is_on_ground = false;
 
-	push_event(EVT_BOMB_PICKED_UP, id);
+	g_bomb_planted = true;
+
+	new drop_x = floatround(where[0]);
+	new drop_y = floatround(where[1]);
+	new drop_z = floatround(where[2]);
+
+	// For this event, we need 6 bits for the id (1 to 32)
+	// and another 6 bytes (48 bits) for x, y and z,
+	// totaling 54 bits, which requires a minimum
+	// of 7 bytes (2 cells).
+	// first cell: [xxxx xxxx][xxxx xxxx][0000 0000][0000 0000]
+	//                                                 ^-- up to 6th bit, id;
+	// 2 32-bit cells here: first word lower has id + plant tick delta, and higher has x.
+	//                      second word lower has y, and higher has z.
+	// The tick delta will be calculated when dispatching the packet.
+	// Masks are needed here due to signal extension when shifting.
+	push_event(EVT_BOMB_PLANTED,
+		(id) | ((drop_x & 0xFFFF) << 16),
+		(drop_y & 0xFFFF) | ((drop_z & 0xFFFF) << 16));	
+
+	// Find c4 entity.
+	new ent = -1;
+
+	while ((ent = find_ent_by_class(ent, "grenade")))
+	{
+		if (get_member(ent, m_Grenade_bIsC4)) {
+			g_c4_exp_time = get_member(ent, m_Grenade_flC4Blow);
+			break;
+		}
+	}
+
+	#if DEBUG
+	log_amx("BOMB PLANTED");
+	#endif	
+}
+
+// RegisterHookChain
+public add_player_item(const id, const p_item)
+{
+	#if FUNC_TRACE
+	log_amx("add_player_item(id<%d>, item entity id<%d>)", id, p_item);
+	#endif
+
+	new item_id = get_member(p_item, m_iId);
+
+	if (item_id != _:WEAPON_C4)
+		return;
+
+	// Track this round c4 by its id so we
+	// know if this is the c4 the engine is removing
+	// from a player when it does so.
+	// If giving a player the c4 and it is not on the ground,
+	// then the player is spawning with it because it was not
+	// removed from anyone (on ground flag was not set).
+	push_event(EVT_BOMB_PICKED_UP, id | (g_bomb_is_on_ground == false ? (1 << 7) : 0));
+	g_bomb_is_on_ground = false;
+	g_current_c4_holder = id;
 
 	#if DEBUG
 	log_amx("BOMB PICKED UP");
+	#endif
+}
+
+// RegisterHookChain
+public remove_player_item(const id, const p_item)
+{
+	#if FUNC_TRACE
+	log_amx("remove_player_item(id<%d>, item entity id<%d>)", id, p_item);
+	#endif
+
+	static position[3];
+	new item_id = get_member(p_item, m_iId);
+
+	// If the bomb was removed due to being planted,
+	// then we don't care about it: the plant event is handled elsewhere.
+	// Also, if we are removing the c4 from a player that is not currently
+	// holding it, we don't abut it either. This happens on new round when
+	// after giving the c4 to a new player, the engine removes it from another,
+	// which should not trigger a "bomb dropped" event.
+	if (item_id != _:WEAPON_C4 || g_bomb_planted || id != g_current_c4_holder)
+		return;
+
+	if (g_bomb_is_on_ground) {
+		log_amx("ERROR: bomb is not supposed to be on the ground when dropping...");
+		return;
+	}
+
+	g_bomb_is_on_ground = true;
+
+	// TODO - this is an approximation. The actual C4 position will
+	// be defined over multiple frames after it is packed inside a WeaponBox.
+	// An idea is to hook WeaponBox creation via RG_CreateWeaponBox, and
+	// track its position over a few snapshots. However, really not worth
+	// the trouble at this point, and also adds wire data.
+	// Another idea is to use setTask and get the backpack positionl later.
+	get_user_origin(id, position);
+
+	// For this event, we need 6 bits for the id (1 to 32)
+	// and another 6 bytes (48 bits) for x, y and z,
+	// totaling 54 bits, which requires a minimum
+	// of 7 bytes (2 cells).
+	// first cell: [xxxx xxxx][xxxx xxxx][0000 0000][0000 0000]
+	//                                                 ^-- up to 6th bit, id;
+	// 2 32-bit cells here: first word lower has id, and higher has x.
+	//                      second word lower has y, and higher has z.
+	// Masks are needed here due to signal extension when shifting.
+	push_event(EVT_BOMB_DROPPED,
+		(id & 0xFFFF) | ((position[0] & 0xFFFF) << 16),
+		(position[1] & 0xFFFF) | ((position[2] & 0xFFFF) << 16));
+
+	g_current_c4_holder = 0;
+
+	#if DEBUG
+	log_amx("BOMB DROPPED");
 	#endif
 }
 
@@ -701,6 +773,67 @@ public bomb_defused(const id)
 	#endif
 
 	push_event(EVT_BOMB_DEFUSED, id);
+
+	#if DEBUG
+	log_amx("BOMB DEFUSED");
+	#endif
+}
+
+// From csx.
+public bomb_explode(const planterId, const defuserId)
+{
+	#if FUNC_TRACE
+	log_amx("bomb_exploded(planterId<%d>, defuserId<%d>)", planterId, defuserId);
+	#endif
+
+	push_event(EVT_BOMB_EXPLODED, planterId | (defuserId << 8));
+
+	#if DEBUG
+	log_amx("BOMB EXPLODED");
+	#endif
+}
+
+public player_got_flashed(
+	const id, const inflictor, const attacker,
+	const Float:fadeTime, const Float:fadeHold,
+	const alpha, Float:color[3])
+{
+	#if FUNC_TRACE
+	log_amx("player_got_flashed(\
+		id<%d>, inflictor<%d>, attacker<%d>, \
+		fadeTime<%.02f>, fadeHold<%.02f>, \
+		alpha<%d>, color<%d,%d,%d>)",
+		id, inflictor, attacker,
+		fadeTime, fadeHold,
+		alpha, color[0], color[1], color[2]);
+	#endif
+
+	new enc_fade = floatround(fadeTime * 100, floatround_floor); // 10ms precision for each
+	new enc_hold = floatround(fadeHold * 100, floatround_floor);
+	new tick = floatround(get_gametime() * 100.0, floatround_floor); // 10ms second precision for when this event happened
+
+	//  6 bits for blinded player
+	//  6 bits for flash thrower id
+	// 20 bits for event tick delta from current snapshot tick
+	// 11 bits for fade time -> because fade may be > 9, up to 12, 1 bit extra
+	// 10 bits for fade hold
+	//  8 bits for alpha
+	// 60 bits total
+	// Use 8 for each id on first dword (eaiser to decode later)
+	// and leave 4 bytes of second dword for metadata
+	push_event(EVT_FLASHED,
+		id | (attacker << 6 | ((tick & 0xFFFFF) << 12)),
+		// [0000 0000][0000 0000][0000 0000][0000 0000]
+		//  ----tick when occurred----         --id1--
+		//                             ---id2--         
+		(enc_fade & 0x7FF) | ((enc_hold & 0x3FF) << 11) | (alpha << 21));
+		// [0000 0000][0000 0000][0000 0000][0000 0000]
+		//     ---alpha---              --fade time---    
+		//                --hold time---
+
+	#if DEBUG
+	log_amx("PLAYER GOT FLASHED");
+	#endif
 }
 
 prepare_socket()
@@ -723,8 +856,12 @@ public open_socket()
 		g_socket = 0;
 	}
 
+#if LOCALDEV
 	g_socket = socket_open("127.0.0.1", 37015, SOCKET_UDP, error, SOCK_NON_BLOCKING);
-		
+#else
+	g_socket = socket_open("lsudp.victoroak.site", 37015, SOCKET_UDP, error, SOCK_NON_BLOCKING);
+#endif
+
 	switch (error)
 	{
 		case 0:
@@ -734,18 +871,25 @@ public open_socket()
 			// Initialize globals.
 			g_map_name_len = get_mapname(g_map_name, charsmax(g_map_name));
 
-			// Update score
-			RegisterHookChain(RG_CSGameRules_RestartRound, "round_started", 1);
-			RegisterHookChain(RG_RoundEnd, "round_ended", 1);
+			if (!g_handlers_attached) {
+				// Update score
+				RegisterHookChain(RG_CSGameRules_RestartRound, "round_started", 1);
+				RegisterHookChain(RG_RoundEnd, "round_ended", 1);
 
-			register_event_ex("TeamInfo" , "team_changed", RegisterEvent_Global);
+				register_event_ex("TeamInfo" , "team_changed", RegisterEvent_Global);
 
-			// Sends the clock new time and starts countdown from it to 0.
-			register_message(get_user_msgid("RoundTime"), "roundtime_changed");
-			register_message(get_user_msgid("DeathMsg"), "death_msg");
-			register_message(get_user_msgid("BarTime"), "bar_time_msg");
-			register_message(get_user_msgid("BombDrop"), "bomb_drop_msg");
-			register_message(get_user_msgid("BombPickup"), "bomb_pickup_msg");
+				// Sends the clock new time and starts countdown from it to 0.
+				register_message(get_user_msgid("RoundTime"), "roundtime_changed");
+				register_message(get_user_msgid("DeathMsg"), "death_msg");
+				register_message(get_user_msgid("BarTime"), "bar_time_msg");
+
+				RegisterHookChain(RG_CBasePlayer_AddPlayerItem, "add_player_item", 1);
+				RegisterHookChain(RG_CBasePlayer_RemovePlayerItem, "remove_player_item", 1);
+				RegisterHookChain(RG_PlantBomb, "bomb_planted_reapi", 1);
+				RegisterHookChain(RG_PlayerBlind, "player_got_flashed", true);
+				
+				g_handlers_attached = true;
+			}
 
 			set_task_ex(SNAPSHOT_TICK, "send_snapshot", SNAPSHOT_TASK_ID, _, _, SetTask_Repeat);
 			
@@ -754,17 +898,17 @@ public open_socket()
 		}
 		case 1:
 		{
-			logdbg("Error while creating socket");
+			log_amx("Error while creating socket");
 			return;
 		}
 		case 2:
 		{
-			logdbg("Couldn't resolve hostname");
+			log_amx("Couldn't resolve hostname");
 			return;
 		}
 		case 3:
 		{
-			logdbg("Couldn't connect");
+			log_amx("Couldn't connect");
 			return;
 		}
 	}
@@ -985,27 +1129,49 @@ bool:build_events_packet(buffer[], &len, max_len)
 	#endif
 
 	new events_written = 0;
-	new type;
+	new type, size;
 
 	for (new i = 0; i < g_event_count; i++) {
 
 		type = g_events[i][EVT_TYPE];
+		size = g_event_size[type];
 
 		// +1 to count type plus data size.
-		if (len + g_event_size[type] + 1 > max_len) {
+		if (len + size + 1 > max_len) {
 			break;
 		}
 
 		buffer[len++] = type;
 
-		switch (type)
+		switch(size)
 		{
-			case EVT_DIED:
+			case 2:
 			{
+				// EVT_BOMB_EXPLODED
+				write_u16(buffer, len, g_events[i][EVT_DATA1]);
+			}
+			case 4:
+			{
+				// EVT_DIED
 				write_u32(buffer, len, g_events[i][EVT_DATA1]);
 			}
-			case EVT_BOMB_DROPPED:
+			case 8:
 			{
+				// EVT_BOMB_DROPPED, EVT_BOMB_PLANTED
+
+				if (type == _:EVT_BOMB_PLANTED) {
+
+					// Calculated time left to explode from packet tick.
+					// in bits 6 to 15 (10 bits - upto 1023, more than enough);
+					g_events[i][EVT_DATA1] |= (
+						(max(
+							0,
+							floatround(
+								(g_c4_exp_time - get_gametime()) * 20.0, // 50ms precision
+								floatround_floor
+							)) & 0x3FF) << 6);
+				}
+
 				write_u32(buffer, len, g_events[i][EVT_DATA1]);
 				write_u32(buffer, len, g_events[i][EVT_DATA2]);
 			}
@@ -1841,27 +2007,6 @@ write_f32(buffer[], &idx, Float:value)
 	write_u32(buffer, idx, _:value);
 }
 
-#if DEBUG_SNAPSHOT
-
-stock print_player_buffer(buffer[], len, player_idx, flags)
-{
-	new byte_str[1024];
-	
-	log_amx("");
-	log_amx("===<PLAYER BUFFER>===");
-	
-	if (byte_arr_to_str(byte_str, charsmax(byte_str), buffer, len, player_idx) != -1)
-		log_amx("Player snapshot (%02d bytes): [%s]", len, byte_str);
-
-	if (byte_arr_to_str(byte_str, charsmax(byte_str), buffer, len, player_idx, true) != -1)
-		log_amx("                     ASCII: [%s]", byte_str);
-	
-	print_curr_player_flags(flags);
-
-	log_amx("===</PLAYER BUFFER>===");
-	log_amx("");
-}
-
 stock byte_arr_to_str(output[], maxlen, data[], length, start_index = 0, bool:use_ascii = false)
 {
 	if (maxlen < length) {
@@ -1889,6 +2034,27 @@ stock byte_arr_to_str(output[], maxlen, data[], length, start_index = 0, bool:us
 	// Trim last space.
 	output[--len] = 0;
 	return len;
+}
+
+#if DEBUG_SNAPSHOT
+
+stock print_player_buffer(buffer[], len, player_idx, flags)
+{
+	new byte_str[1024];
+	
+	log_amx("");
+	log_amx("===<PLAYER BUFFER>===");
+	
+	if (byte_arr_to_str(byte_str, charsmax(byte_str), buffer, len, player_idx) != -1)
+		log_amx("Player snapshot (%02d bytes): [%s]", len, byte_str);
+
+	if (byte_arr_to_str(byte_str, charsmax(byte_str), buffer, len, player_idx, true) != -1)
+		log_amx("                     ASCII: [%s]", byte_str);
+	
+	print_curr_player_flags(flags);
+
+	log_amx("===</PLAYER BUFFER>===");
+	log_amx("");
 }
 
 stock byte_arr_to_num(data[], length)

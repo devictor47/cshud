@@ -14,6 +14,7 @@ build_property.ProjectTypeGuids =
 build_property.InvariantGlobalization = 
 build_property.PlatformNeutralAssembly = 
 build_property.EnforceExtendedAnalyzerRules = 
+build_property.EntryPointFilePath = 
 build_property._SupportedPlatformList = Linux,macOS,Windows
 build_property.RootNamespace = UdpReceiver
 build_property.ProjectDir = C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\

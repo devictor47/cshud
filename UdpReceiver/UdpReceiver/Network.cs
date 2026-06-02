@@ -3,7 +3,9 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.ComponentModel.Design.Serialization;
 using System.Diagnostics;
+using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 
 namespace UdpReceiver
 {
@@ -102,9 +104,6 @@ namespace UdpReceiver
 
         public static class Subscribe
         {
-            public static readonly byte[] SubscribeSuccess =
-                Encoding.UTF8.GetBytes("{\"subscribe\":\"success\"}");
-
             public static readonly byte[] UnsubscribeSuccess =
                 Encoding.UTF8.GetBytes("{\"unsubscribe\":\"success\"}");
 
@@ -114,6 +113,40 @@ namespace UdpReceiver
                     reason = GENERIC_ERROR_REASON;
 
                 return Encoding.UTF8.GetBytes($"{{\"subscribe\":\"failed\",\"error\":\"{reason}\"}}");
+            }
+
+            public static byte[] SubscribeSuccess(ulong svId)
+            {
+                return Encoding.UTF8.GetBytes($"{{\"subscribe\":\"success\", \"id\":\"{svId}\"}}");
+            }
+        }
+
+        public static class ListServers
+        {
+            static readonly JsonSerializerOptions JsonOpts = new()
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            };
+
+            public static byte[] BuildJson(Dictionary<ulong, Server> servers)
+            {
+                var list = new List<object>(servers.Count);
+
+                foreach (var x in servers)
+                {
+                    list.Add(new
+                    {
+                        name = x.Value.Tag,
+                        id = x.Value.Id
+                    });
+                }
+
+                var response = new
+                {
+                    servers = list
+                };
+
+                return JsonSerializer.SerializeToUtf8Bytes(response, JsonOpts);
             }
         }
     }

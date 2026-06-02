@@ -1,2 +1,3 @@
 C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\bin\Release\net10.0\publish\linux-x64\UdpReceiver.pdb
+C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\bin\Release\net10.0\publish\linux-x64\config.json
 C:\Users\victo\OneDrive\Vs Projects\CS 1.6\cshud\UdpReceiver\UdpReceiver\bin\Release\net10.0\publish\linux-x64\UdpReceiver

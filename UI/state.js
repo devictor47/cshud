@@ -13,6 +13,10 @@ const State = (() => {
         radar: {
             overview: null
         },
+        c4: {
+            timeLeft: null,
+            startedAt: null
+        }
     };
 
     function on(event, cb) {
@@ -219,6 +223,15 @@ const State = (() => {
 
     })();
 
+    function startC4Timer(timeLeft) {
+        state.c4.timeLeft = timeLeft;
+        state.c4.startedAt = performance.now();
+    }
+
+    function c4Exploded() {
+        state.c4.timeLeft = null;
+        state.c4.startedAt = null;
+    }
 
     return {
         time: state.time,
@@ -229,7 +242,12 @@ const State = (() => {
         upsertPlayer,
         removePlayer,
         setGlobal,
-        getRoundTimeLeft
+        getRoundTimeLeft,
+        startC4Timer,
+        c4Exploded,
+        c4Running: () => state.c4.timeLeft !== null,
+        c4TimeLeft: () => state.c4.timeLeft,
+        c4StartedAt: () => state.c4.startedAt
     };
 
 })();

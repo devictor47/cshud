@@ -96,64 +96,62 @@ window.OverviewAssets = (() => {
 
 window.IconAssets = (() => {
 
+    const cache = new Map();
+    
     function missingWeaponIcon() {
         const el = document.createElement("span");
         el.className = "icon icon--missing";
         return el;
     }
 
-    const loadWeaponIconTemplate = (() => {
+    async function loadWeaponIcon(iconName) {
 
-        const cache = new Map();
+        if (cache.has(iconName))
+            return;
 
-        return async function (iconName) {
+        const path =
+            `hud/csgo-icons/svg_normal/${iconName}.svg`;
 
-            let promise = cache.get(iconName);
+        const res = await fetch(path);
 
-            if (!promise) {
+        if (!res.ok)
+            throw new Error(`Failed to load ${iconName}`);
 
-                promise = (async () => {
+        const text = await res.text();
 
-                    const path =
-                        `hud/csgo-icons/svg_normal/${iconName}.svg`;
+        const template = document.createElement("template");
+        template.innerHTML = text;
 
-                    const res = await fetch(path);
+        const svg = template.content.querySelector("svg");
 
-                    if (!res.ok)
-                        throw new Error(`Failed to load ${iconName}`);
+        svg.style.overflow = "visible";
 
-                    const text = await res.text();
+        svg.classList.add("icon");
 
-                    const wrapper = document.createElement("div");
-                    wrapper.innerHTML = text;
+        svg.setAttribute(
+            "preserveAspectRatio",
+            "xMaxYMid meet"
+        );
 
-                    const svg = wrapper.querySelector("svg");
-                    svg.style.overflow = "visible";
-                    svg.classList.add("icon");
-                    svg.setAttribute(
-                        "preserveAspectRatio",
-                        "xMaxYMid meet"
-                    );
+        cache.set(iconName, svg);
+    }
 
-                    return svg;
-                })();
+    async function preloadWeaponIcons() {
 
-                cache.set(iconName, promise);
-            }
+        const loads = [];
 
-            try {
-                return (await promise).cloneNode(true);
-            }
-            catch (err) {
-                cache.delete(iconName);
-                console.error(err);
-                return missingWeaponIcon();
-            }
+        for (const weapon of Object.values(Consts.WEAPONS)) {
+
+            if (!weapon?.iconName)
+                continue;
+
+            loads.push(loadWeaponIcon(weapon.iconName));
         }
 
-    })();
+        await Promise.all(loads);
+    }
 
-    async function createWeaponIconAsync(id) {
+    function createWeaponIcon(id) {
 
         const iconName = Consts.WEAPONS[id]?.iconName;
 
@@ -161,17 +159,28 @@ window.IconAssets = (() => {
             return missingWeaponIcon();
 
         switch (id) {
+
             case Consts.WEAPONS_IDS.HE:
                 return createItemIcon(Consts.ITEMS_ICONS.HE);
+
             case Consts.WEAPONS_IDS.FB:
                 return createItemIcon(Consts.ITEMS_ICONS.FB);
+
             case Consts.WEAPONS_IDS.SMOKE:
                 return createItemIcon(Consts.ITEMS_ICONS.SMOKE);
+
             case Consts.WEAPONS_IDS.C4:
                 return createItemIcon(Consts.ITEMS_ICONS.C4);
-            default:
-                return await loadWeaponIconTemplate(iconName);
-        }        
+
+            default: {
+
+                const svg = cache.get(iconName);
+
+                return svg
+                    ? svg.cloneNode(true)
+                    : missingWeaponIcon();
+            }
+        }
     }
 
     const createItemIcon = (() => {
@@ -207,8 +216,11 @@ window.IconAssets = (() => {
     return {
         VEST_SRC: "hud/vest.png",
         VESTHELM_SRC: "hud/vesthelm.png",
-        createWeaponIconAsync,
+        createWeaponIcon,
         createItemIcon,
+        Init: async () => {
+            await preloadWeaponIcons();
+        }
     };
 })();
 

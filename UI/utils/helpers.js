@@ -29,3 +29,7 @@ window.TakeLatestAsync = (() => {
     };
 
 })();
+
+window.GameNowTick =  function(currentTick, receivedAt) {
+    return currentTick + ((performance.now() - receivedAt) / 1000);
+};

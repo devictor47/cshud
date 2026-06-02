@@ -17,11 +17,19 @@ window.DOM = (() => {
         radar: {
             containerEl: document.getElementById('map-column'),
             mapCanvasEl: document.getElementById("map-canvas"),
-            playersCanvasEl: document.getElementById("players-canvas"),
+            entitiesCanvasEl: document.getElementById("entities-canvas"),
         },
 
-        events: {
-            container: document.querySelector("#events"),
+        chat: {
+            sayEl: document.getElementById("say-chat"),
+        },
+
+        overlays: {
+            banner: document.getElementById("overlay-banner"),
+            c4: {
+                overlayEl: document.getElementById("c4-overlay"),
+                timerEl: document.getElementById("c4-timer")
+            }
         }
     };
 

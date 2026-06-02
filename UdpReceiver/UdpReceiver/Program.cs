@@ -15,7 +15,7 @@ namespace UdpReceiver
 {
     partial class Program
     {
-        static volatile Dictionary<ulong, Server> AuthorizedServers = InitServers();
+        static readonly Dictionary<ulong, Server> AuthorizedServers = InitServers();
 
         static readonly ConcurrentDictionary<IWebSocketConnection, ulong> ConnectedClients = new();
 
@@ -109,6 +109,15 @@ namespace UdpReceiver
                     {
                         ArrayPool<byte>.Shared.Return(recvBuffer);
                         Log($"IP not authorized: {ep.Address}");
+                        Log($"\t|-Connection attempted: {ep.Address}:{svPort} (id = {svId})");
+                        Log($"\t|-Available: ");
+
+                        var strs = AuthorizedServers.Select(x => $"\t\t|-<{x.Value.Tag}> ({x.Value.IP}:{x.Value.Port})");
+                        foreach (var item in strs)
+                        {
+                            Log(item);
+                        }
+
                         continue;
                     }                    
 
@@ -235,14 +244,14 @@ namespace UdpReceiver
         static Snapshot? ProcessServerPacket(Span<byte> data, Server server)
         {
             // General structure:
-            // [server port][game time][G][global flags][data][P][count][id][flags][data][E][count][type][data]
+            // [server port][game time][G][global flags][data][P][count][FlashedId][flags][data][E][count][type][data]
             //
             // [server port]
             //  port: 2 bytes (u16);
             //
             // [game time]
             //   (optional) [G][global flags][data]
-            //   (optional) [P][count][id][flags][data][id][flags][data][id][flags][data]...
+            //   (optional) [P][count][FlashedId][flags][data][FlashedId][flags][data][FlashedId][flags][data]...
             //   (optional) [E][count][type][data][type][data][type][data][type][data]...
             //
             // game time: 4 bytes (f32 - 4 bytes float);
@@ -257,9 +266,9 @@ namespace UdpReceiver
             //  -MAP        = first byte is name length (u8);
             //
             // [P] packet
-            // [P][count][id][flags][data][id][flags][data][id][flags][data]...
+            // [P][count][FlashedId][flags][data][FlashedId][flags][data][FlashedId][flags][data]...
             // count: 1 byte (u8);
-            // player id: 1 byte (u8);
+            // player FlashedId: 1 byte (u8);
             // player flags: 2 bytes (u16);
             // player flags data sizes:
             //  -TEAM   = 1 byte (u8);
@@ -281,18 +290,17 @@ namespace UdpReceiver
             // type: 1 byte (u8);
             // data sizes:
             //  -ROUND_ENDED         = 1 byte (u8);
-            //  -DIED                = 4 bytes (u32);
             //  -BOMB_PLANTING       = 1 byte (u8);
             //  -BOMB_PLANT_ABORTED  = 1 byte (u8);
-            //  -BOMB_PLANTED        = 1 byte (u8);
-            //  -BOMB_DROPPED        = 8 bytes (1 byte for id + 3 * i16 for (x,y,z));
-            //  -BOMB_PICKED_UP      = 1 byte (u8);
+            //  -BOMB_PLANTED        = 8 bytes (6 bits for id + 10 bits for tick delta + 3 * i16 for (x,y,z));
+            //  -BOMB_DROPPED        = 8 bytes (1 byte for FlashedId + 3 * i16 for (x,y,z));
+            //  -BOMB_PICKED_UP      = 1 byte (1 bit to indicate whether spawned or from the ground, rest for player id);
             //  -BOMB_DEFUSING       = 1 byte (u8);
             //  -BOMB_DEFUSE_ABORTED = 1 byte (u8); 
             //  -BOMB_DEFUSED        = 1 byte (u8);
-            //  -BOMB_EXPLODED       = 1 byte (u8);
-            //  -FLASHED             = 1 byte (u8);
-            //  -KILL_FLASHBANGED    = 1 byte (u8);
+            //  -BOMB_EXPLODED       = 2 bytes (u16 - 2 ids - planter and defuser, if any);
+            //  -FLASHED             = 8 bytes (6 bits for victim, 6 bit for thrower, 20 bits for event tick, 11 bits for fade time, 10 bits for hold time, 8 bits for alpha);
+            //  -DIED                = 4 bytes (u32);
 
 #if DEBUG
             Console.WriteLine($"Processing packet of {data.Length} bytes...");
@@ -495,7 +503,7 @@ namespace UdpReceiver
 
                                     // Still, we must alert the UI that we are good.
                                     // Nothing else to be done.
-                                    _ = SendToClient(socket, WsJsonResponses.Subscribe.SubscribeSuccess, server.Context);
+                                    _ = SendToClient(socket, WsJsonResponses.Subscribe.SubscribeSuccess(svId), server.Context);
                                     return;
                                 }
 
@@ -506,9 +514,18 @@ namespace UdpReceiver
                             ConnectedClients[socket] = svId;
                             server.Context.AddClient(socket);
 
-                            _ = SendToClient(socket, WsJsonResponses.Subscribe.SubscribeSuccess, server.Context);
+                            _ = SendToClient(socket, WsJsonResponses.Subscribe.SubscribeSuccess(svId), server.Context);
 
                             Log($"WebScoket client {socket.ConnectionInfo.ClientIpAddress}:{socket.ConnectionInfo.ClientPort} connected to server {svId}.");
+
+                            break;
+
+                        case "list":
+
+                            _ = SendToClient(
+                                socket,
+                                WsJsonResponses.ListServers.BuildJson(AuthorizedServers)
+                            );
 
                             break;
                     }
@@ -593,7 +610,7 @@ namespace UdpReceiver
         private static List<PlayerDelta> ProcessPlayersPacket(ref PacketReader pReader, Server server)
         {
             // [P] packet
-            // [P][count][id][flags][data][id][flags][data][id][flags][data]...
+            // [P][count][FlashedId][flags][data][FlashedId][flags][data][FlashedId][flags][data]...
             // count: 1 byte (u8);
 
             byte numPlayers = pReader.ReadU8();
@@ -608,7 +625,7 @@ namespace UdpReceiver
             {
                 var delta = new PlayerDelta();
 
-                // player id: 1 byte (u8);
+                // player FlashedId: 1 byte (u8);
                 byte playerId = pReader.ReadU8();
                 delta.Id = playerId;
 
@@ -938,18 +955,18 @@ namespace UdpReceiver
             for (int i = 0; i < numEvents; i++)
             {
                 // ROUND_ENDED         = 1 byte (u8);
-                // DIED                = 4 bytes (u32);
                 // BOMB_PLANTING       = 1 byte (u8);
                 // BOMB_PLANT_ABORTED  = 1 byte (u8);
-                // BOMB_PLANTED        = 1 byte (u8);
-                // BOMB_DROPPED        = 8 bytes (1 byte for id + 3 * i16 for (x,y,z));
-                // BOMB_PICKED_UP      = 1 byte (u8);
+                // BOMB_PLANTED        = 8 bytes (6 bits for id + 10 bits for tick delta + 3 * i16 for (x,y,z));
+                // BOMB_DROPPED        = 8 bytes (1 byte for FlashedId + 3 * i16 for (x,y,z));
+                // BOMB_PICKED_UP      = 1 byte (1 bit to indicate whether spawned or from the ground, rest for player id);
                 // BOMB_DEFUSING       = 1 byte (u8);
                 // BOMB_DEFUSE_ABORTED = 1 byte (u8); 
                 // BOMB_DEFUSED        = 1 byte (u8);
-                // BOMB_EXPLODED       = 1 byte (u8);
-                // FLASHED             = 1 byte (u8);
+                // BOMB_EXPLODED       = 2 bytes (u16 - 2 ids - planter and defuser, if any);
+                // FLASHED             = 8 bytes (6 bits for victim, 6 bit for thrower, 20 bits for event tick, 11 bits for fade time, 10 bits for hold time, 8 bits for alpha);
                 // KILL_FLASHBANGED    = 1 byte (u8);
+                // DIED                = 4 bytes (u32);
                 var type = (EventType)pReader.ReadU8();
 
                 switch (type)
@@ -973,19 +990,197 @@ namespace UdpReceiver
                         });
 
 #if DEBUG
-                        logStr.AppendLine($"  |--[ROUND ENDED status:<{status}> reason:<{reason}>]");
+                        logStr.AppendLine($"  |--[ROUND ENDED status<{status}> reason<{reason}>]");
 #endif
 
                         break;
 
+                    case EventType.BOMB_PLANTING:
+
+                        var pId = pReader.ReadU8();
+
+                        events.Add(new BombPlantingEvent
+                        {
+                            Id = pId
+                        });
+
+#if DEBUG
+                        logStr.AppendLine($"  |--[BOMB PLANTING id<{pId}>]");
+#endif
+                        break;
+
+                    case EventType.BOMB_PLANT_ABORTED:
+
+                        pId = pReader.ReadU8();
+
+                        events.Add(new BombPlantAbortedEvent
+                        {
+                            Id = pId
+                        });
+
+#if DEBUG
+                        logStr.AppendLine($"  |--[BOMB PLANTED ABORTED id<{pId}>]");
+#endif
+                        break;
+
+                    case EventType.BOMB_PLANTED:
+                        {
+                            var packed = pReader.ReadU16();
+                            var planterId = (byte)(packed & 0x3F); // 6 bits for planter id.
+                            var explodeInSecEncoded = (short)((packed >> 6) & 0x3FF); // 10 bits for delta between plant and packet assembly.
+                            var plantX = pReader.ReadI16();
+                            var plantY = pReader.ReadI16();
+                            var plantZ = pReader.ReadI16();
+
+                            float tickDelta = explodeInSecEncoded / 20f;
+                            events.Add(new BombPlantedEvent
+                            {
+                                Id = planterId,
+                                X = plantX,
+                                Y = plantY,
+                                Z = plantZ,
+                                ExplodesInSec = tickDelta
+                            });
+
+#if DEBUG
+                            logStr.AppendLine($"  |--[BOMB PLANTED id<{planterId}> where<{plantX},{plantY},{plantZ}>]");
+#endif
+
+                            break;
+                        }
+                    
+                    case EventType.BOMB_DROPPED:
+
+                        var dropperId = (byte)pReader.ReadU16();
+                        var dropX = pReader.ReadI16();
+                        var dropY = pReader.ReadI16();
+                        var dropZ = pReader.ReadI16();
+
+                        events.Add(new BombDroppedEvent
+                        {
+                            Id = dropperId,
+                            X = dropX,
+                            Y = dropY,
+                            Z = dropZ,
+                        });
+
+#if DEBUG
+                        logStr.AppendLine($"  |--[BOMB DROPPED id<{dropperId}> where<{dropX},{dropY},{dropZ}>]");
+#endif
+
+                        break;
+
+                    case EventType.BOMB_PICKED_UP:
+
+                        byte data = pReader.ReadU8();
+                        pId = (byte)(data & (0x7F)); // Zero the 7th bit.
+                        var gotItWhenSpawning = (byte)(data >> 7) == 1;
+
+                        events.Add(new BombPickedUpEvent
+                        {
+                            Id = pId,
+                            FromSpawn = gotItWhenSpawning
+                        });
+
+#if DEBUG
+                        logStr.AppendLine($"  |--[BOMB PICKED UP id<{pId}> spawn?<{gotItWhenSpawning}>]");
+#endif
+                        break;
+
+                    case EventType.BOMB_DEFUSING:
+
+                        pId = pReader.ReadU8();
+
+                        events.Add(new BombDefusingEvent
+                        {
+                            Id = pId
+                        });
+
+#if DEBUG
+                        logStr.AppendLine($"  |--[BOMB DEFUSING id<{pId}>]");
+#endif
+                        break;
+
+                    case EventType.BOMB_DEFUSE_ABORTED:
+
+                        pId = pReader.ReadU8();
+
+                        events.Add(new BombDefuseAbortedEvent
+                        {
+                            Id = pId
+                        });
+
+#if DEBUG
+                        logStr.AppendLine($"  |--[BOMB DEFUSE ABORTED id<{pId}>]");
+#endif
+                        break;
+
+                    case EventType.BOMB_DEFUSED:
+
+                        pId = pReader.ReadU8();
+
+                        events.Add(new BombDefusedEvent
+                        {
+                            Id = pId
+                        });
+
+#if DEBUG
+                        logStr.AppendLine($"  |--[BOMB DEFUSED id<{pId}>]");
+#endif
+                        break;
+
+                    case EventType.BOMB_EXPLODED:
+
+                        pId = pReader.ReadU8();
+                        var dId = pReader.ReadU8();
+
+                        events.Add(new BombExplodedEvent
+                        {
+                            PlanterId = pId,
+                            DefuserId = dId != 0 ? dId : null,
+                        });
+
+#if DEBUG
+                        logStr.AppendLine($"  |--[BOMB EXPLODED planter<{pId}>{(dId != 0 ? $" defuser<{dId}>" : "")}]");
+#endif
+                        break;
+
+                    case EventType.FLASHED:
+                        {
+                            var packed = pReader.ReadU32();
+                            var flashedId = (byte)(packed & 0x3F);
+                            var throwerId = (byte)((packed >> 6) & 0x3F);
+                            var evTickEncoded = (int)((packed >> 12) & 0xFFFFF);
+
+                            packed = pReader.ReadU32();
+                            int fadeEncoded = (int)(packed & 0x7FF);
+                            int holdEncoded = (int)((packed >> 11) & 0x3FF);
+                            int alpha = (int)((packed >> 21) & 0xFF);
+
+                            float evTick = evTickEncoded / 100f;
+                            float fadeTime = fadeEncoded / 100f;
+                            float holdTime = holdEncoded / 100f;
+
+                            events.Add(new PlayerFlashedEvent
+                            {
+                                FlashedId = flashedId,
+                                ThrowerId = throwerId,
+                                FadeTime = fadeTime,
+                                HoldTime = holdTime,
+                                Tick = evTick
+                            });
+
+                            break;
+                        }
+                    
                     case EventType.DIED:
 
                         var deathInfo = pReader.ReadU32();
 
-                        // killer id    = 6 bits (0 to 32)
-                        // victim id    = 5 bits (0 to 31 -> id - 1)
-                        // assistant id = 6 bits (0 means no assist, 1 to 32 the id)
-                        // weapon id    = 5 bits
+                        // killer FlashedId    = 6 bits (0 to 32)
+                        // victim FlashedId    = 5 bits (0 to 31 -> FlashedId - 1)
+                        // assistant FlashedId = 6 bits (0 means no assist, 1 to 32 the FlashedId)
+                        // weapon FlashedId    = 5 bits
                         // rarity       = 10 bits (KillRarity has 10 possible flags)
                         // total        = 32 bits = 4 bytes.
                         byte killer = (byte)(deathInfo & 0x3F);
@@ -1010,32 +1205,10 @@ namespace UdpReceiver
                         events.Add(de);
 
 #if DEBUG
-                        logStr.AppendLine($"  |--[DIED k:<{killer}> v:<{victim}> assist:<{assistant}> wep:<{weapon}> rarity:<{rarity}>]");
+                        logStr.AppendLine($"  |--[DIED k<{killer}> v<{victim}> assist<{assistant}> wep<{weapon}> rarity<{rarity}>]");
 #endif
                         break;
 
-                    case EventType.BOMB_PLANTING:
-                        break;
-                    case EventType.BOMB_PLANT_ABORTED:
-                        break;
-                    case EventType.BOMB_PLANTED:
-                        break;
-                    case EventType.BOMB_DROPPED:
-                        break;
-                    case EventType.BOMB_PICKED_UP:
-                        break;
-                    case EventType.BOMB_DEFUSING:
-                        break;
-                    case EventType.BOMB_DEFUSE_ABORTED:
-                        break;
-                    case EventType.BOMB_DEFUSED:
-                        break;
-                    case EventType.BOMB_EXPLODED:
-                        break;
-                    case EventType.FLASHED:
-                        break;
-                    case EventType.KILL_FLASHBANGED:
-                        break;
                     default:
                         break;
                 }

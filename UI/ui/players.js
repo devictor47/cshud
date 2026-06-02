@@ -71,13 +71,13 @@ window.PlayersUI = (() => {
         };
     }
 
-    async function upsert(player, delta) {
+    function upsert(player, delta) {
 
         if (player.team === 1)
-            return await render(player, delta, upsertT(player));
+            return render(player, delta, upsertT(player));
 
         if (player.team === 2)
-            return await render(player, delta, upsertCT(player));
+            return render(player, delta, upsertCT(player));
 
         // If any other team, then we remove
         // the player from the UI.
@@ -153,7 +153,7 @@ window.PlayersUI = (() => {
         }
     }
 
-    async function render(player, delta, pCardNode) {
+    function render(player, delta, pCardNode) {
 
         if (delta.name !== undefined)
             pCardNode.nameEl.textContent = delta.name;
@@ -211,21 +211,13 @@ window.PlayersUI = (() => {
         }
 
         if (delta.pwep !== undefined) {
-            TakeLatestAsync(
-                `pwep_${player.id}`,
-                IconAssets.createWeaponIconAsync,
-                (icon) => pCardNode.primaryEl.replaceChildren(icon),
-                delta.pwep
-            );
+            const wepIco = IconAssets.createWeaponIcon(delta.pwep);
+            pCardNode.primaryEl.replaceChildren(wepIco);
         }
 
         if (delta.swep !== undefined) {
-            TakeLatestAsync(
-                `swep_${player.id}`,
-                IconAssets.createWeaponIconAsync,
-                (icon) => pCardNode.secondaryEl.replaceChildren(icon),
-                delta.swep
-            );
+            const wepIco = IconAssets.createWeaponIcon(delta.swep);
+            pCardNode.secondaryEl.replaceChildren(wepIco);
         }
 
         applyItemDelta(
@@ -282,9 +274,24 @@ window.PlayersUI = (() => {
         }
     }
 
+    function blinded(playerId, holdTime, fadeTime) {
+
+        const node = tNodes.get(playerId) || ctNodes.get(playerId);
+        
+        node.cardEl.classList.add("blind-hold");
+
+        setTimeout(() => {
+            requestAnimationFrame(() => {
+                node.cardEl.style.transition = `background-color ${fadeTime}s linear`;
+                node.cardEl.classList.remove("blind-hold");
+            });
+        }, holdTime * 1000);
+    }
+
     return {
         upsert,
-        remove
+        remove,
+        blinded
     };
 
 })();

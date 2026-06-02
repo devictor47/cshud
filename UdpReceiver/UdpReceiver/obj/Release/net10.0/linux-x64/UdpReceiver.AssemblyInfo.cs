@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("UdpReceiver")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e6571eb487a9e4b90109a87d36c43811e4959972")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+fc278609b0be61caa6dc5494cfb347d4335ff82b")]
 [assembly: System.Reflection.AssemblyProductAttribute("UdpReceiver")]
 [assembly: System.Reflection.AssemblyTitleAttribute("UdpReceiver")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

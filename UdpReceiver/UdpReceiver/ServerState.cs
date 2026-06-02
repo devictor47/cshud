@@ -534,6 +534,60 @@ namespace UdpReceiver
                             w.WriteNumber("s", (int)r.Status);
                             w.WriteNumber("r", (int)r.Reason);
                             break;
+
+                        case BombPlantingEvent b:
+                            w.WriteNumber("i", b.Id);
+                            break;
+
+                        case BombPlantAbortedEvent b:
+                            w.WriteNumber("i", b.Id);
+                            break;
+
+                        case BombPlantedEvent b:
+                            w.WriteNumber("i", b.Id);
+                            w.WriteNumber("x", b.X);
+                            w.WriteNumber("y", b.Y);
+                            w.WriteNumber("z", b.Z);
+                            w.WriteNumber("t", b.ExplodesInSec);
+                            break;
+
+                        case BombDroppedEvent b:
+                            w.WriteNumber("i", b.Id);
+                            w.WriteNumber("x", b.X);
+                            w.WriteNumber("y", b.Y);
+                            w.WriteNumber("z", b.Z);
+                            break;
+
+                        case BombPickedUpEvent b:
+                            w.WriteNumber("i", b.Id);
+                            w.WriteBoolean("s", b.FromSpawn);
+                            break;
+
+                        case BombDefusingEvent b:
+                            w.WriteNumber("i", b.Id);
+                            break;
+
+                        case BombDefuseAbortedEvent b:
+                            w.WriteNumber("i", b.Id);
+                            break;
+
+                        case BombDefusedEvent b:
+                            w.WriteNumber("i", b.Id);
+                            break;
+
+                        case BombExplodedEvent b:
+                            w.WriteNumber("p", b.PlanterId);
+                            if (b.DefuserId.HasValue)
+                                w.WriteNumber("d", b.DefuserId.Value);
+                            break;
+
+                        case PlayerFlashedEvent b:
+                            w.WriteNumber("v", b.FlashedId);
+                            w.WriteNumber("a", b.ThrowerId);
+                            w.WriteNumber("f", b.FadeTime);
+                            w.WriteNumber("h", b.HoldTime);
+                            w.WriteNumber("t", b.Tick);
+                            break;
                     }
 
                     w.WriteEndObject();

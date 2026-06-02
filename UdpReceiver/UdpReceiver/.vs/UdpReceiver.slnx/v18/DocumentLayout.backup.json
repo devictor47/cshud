@@ -7,6 +7,14 @@
       "RelativeMoniker": "D:0:0:{622F0840-5401-DBE9-EDE6-3012AB861D56}|UdpReceiver.csproj|solutionrelative:program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
+      "AbsoluteMoniker": "D:0:0:{622F0840-5401-DBE9-EDE6-3012AB861D56}|UdpReceiver.csproj|c:\\users\\victo\\onedrive\\vs projects\\cs 1.6\\cshud\\udpreceiver\\udpreceiver\\events.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{622F0840-5401-DBE9-EDE6-3012AB861D56}|UdpReceiver.csproj|solutionrelative:events.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{622F0840-5401-DBE9-EDE6-3012AB861D56}|UdpReceiver.csproj|c:\\users\\victo\\onedrive\\vs projects\\cs 1.6\\cshud\\udpreceiver\\udpreceiver\\network.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{622F0840-5401-DBE9-EDE6-3012AB861D56}|UdpReceiver.csproj|solutionrelative:network.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{622F0840-5401-DBE9-EDE6-3012AB861D56}|UdpReceiver.csproj|c:\\users\\victo\\onedrive\\vs projects\\cs 1.6\\cshud\\udpreceiver\\udpreceiver\\serverstate.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{622F0840-5401-DBE9-EDE6-3012AB861D56}|UdpReceiver.csproj|solutionrelative:serverstate.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
@@ -17,8 +25,8 @@
       "VerticalTabListWidth": 256,
       "DocumentGroups": [
         {
-          "DockedWidth": 295,
-          "SelectedChildIndex": 2,
+          "DockedWidth": 446,
+          "SelectedChildIndex": 4,
           "Children": [
             {
               "$type": "Bookmark",
@@ -26,15 +34,42 @@
             },
             {
               "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "Network.cs",
+              "DocumentMoniker": "C:\\Users\\victo\\OneDrive\\Vs Projects\\CS 1.6\\cshud\\UdpReceiver\\UdpReceiver\\Network.cs",
+              "RelativeDocumentMoniker": "Network.cs",
+              "ToolTip": "C:\\Users\\victo\\OneDrive\\Vs Projects\\CS 1.6\\cshud\\UdpReceiver\\UdpReceiver\\Network.cs",
+              "RelativeToolTip": "Network.cs",
+              "ViewState": "AgIAAHkAAAAAAAAAAADwv4sAAAAnAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-02T16:56:31.895Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
               "DocumentIndex": 1,
+              "Title": "Events.cs",
+              "DocumentMoniker": "C:\\Users\\victo\\OneDrive\\Vs Projects\\CS 1.6\\cshud\\UdpReceiver\\UdpReceiver\\Events.cs",
+              "RelativeDocumentMoniker": "Events.cs",
+              "ToolTip": "C:\\Users\\victo\\OneDrive\\Vs Projects\\CS 1.6\\cshud\\UdpReceiver\\UdpReceiver\\Events.cs",
+              "RelativeToolTip": "Events.cs",
+              "ViewState": "AgIAAIEAAAAAAAAAAAAAAIgAAAAIAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-28T16:54:41.62Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
               "Title": "ServerState.cs",
               "DocumentMoniker": "C:\\Users\\victo\\OneDrive\\Vs Projects\\CS 1.6\\cshud\\UdpReceiver\\UdpReceiver\\ServerState.cs",
               "RelativeDocumentMoniker": "ServerState.cs",
               "ToolTip": "C:\\Users\\victo\\OneDrive\\Vs Projects\\CS 1.6\\cshud\\UdpReceiver\\UdpReceiver\\ServerState.cs",
               "RelativeToolTip": "ServerState.cs",
-              "ViewState": "AgIAAM8BAAAAAAAAAAAAAKcAAAATAAAAAAAAAA==",
+              "ViewState": "AgIAAB8CAAAAAAAAAAAqwCYCAAAsAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-21T21:07:03.52Z"
+              "WhenOpened": "2026-05-27T23:08:57.767Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
@@ -42,9 +77,9 @@
               "Title": "Program.cs",
               "DocumentMoniker": "C:\\Users\\victo\\OneDrive\\Vs Projects\\CS 1.6\\cshud\\UdpReceiver\\UdpReceiver\\Program.cs",
               "RelativeDocumentMoniker": "Program.cs",
-              "ToolTip": "C:\\Users\\victo\\OneDrive\\Vs Projects\\CS 1.6\\cshud\\UdpReceiver\\UdpReceiver\\Program.cs",
-              "RelativeToolTip": "Program.cs",
-              "ViewState": "AgIAAHIBAAAAAAAAAAAQwJ0BAAC2AAAAAAAAAA==",
+              "ToolTip": "C:\\Users\\victo\\OneDrive\\Vs Projects\\CS 1.6\\cshud\\UdpReceiver\\UdpReceiver\\Program.cs*",
+              "RelativeToolTip": "Program.cs*",
+              "ViewState": "AgIAAGkAAAAAAAAAAAAlwHsAAAAhAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-05-19T19:33:30.314Z",
               "EditorCaption": ""

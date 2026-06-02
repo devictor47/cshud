@@ -46,7 +46,7 @@ namespace UdpReceiver
             var ipAsInt = BinaryPrimitives.ReadUInt32BigEndian(bytes);
 
             // bits = 63    48 47..16 15...0
-            //   Id = [000...] [ ip ] [port]
+            //   FlashedId = [000...] [ ip ] [port]
             return ((ulong)ipAsInt << 16) | port;
         }
     }
