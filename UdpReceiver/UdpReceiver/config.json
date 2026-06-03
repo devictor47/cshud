@@ -15,10 +15,17 @@
       "enabled": true
     },
     {
+      "ip": "181.220.184.101",
+      "port": 27045,
+      "delay": 0,
+      "tag": "dev machine",
+      "enabled": true
+    },
+    {
       "ip": "187.77.240.176",
       "port": 27015,
       "delay": 35,
-      "tag": "pugzao1000",
+      "tag": "pugzao 1000 FPS",
       "enabled": true
     },
     {

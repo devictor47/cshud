@@ -65,6 +65,9 @@ namespace UdpReceiver
 
             EndPoint remote = new IPEndPoint(IPAddress.Any, 0);
 
+            var vpnHostIp = IPAddress.Parse("187.77.240.176");
+            var vpnHostEp = new IPEndPoint(vpnHostIp, 0);
+
 #if DEBUG_STAT
             LogDebug($"==== INITIATING LOG ====");
             LogDebug(
@@ -102,6 +105,13 @@ namespace UdpReceiver
                     }
 
                     var ep = (IPEndPoint)remote;
+
+                    if (IPAddress.IsLoopback(ep.Address)
+                        && OperatingSystem.IsLinux())
+                    {
+                        ep = vpnHostEp;
+                    }
+
                     var svPort = BinaryPrimitives.ReadUInt16LittleEndian(recvBuffer);
                     var svId = Server.BuildIdFromIPv4AndPort(ep.Address, svPort);
 
@@ -110,6 +120,7 @@ namespace UdpReceiver
                         ArrayPool<byte>.Shared.Return(recvBuffer);
                         Log($"IP not authorized: {ep.Address}");
                         Log($"\t|-Connection attempted: {ep.Address}:{svPort} (id = {svId})");
+#if DEBUG
                         Log($"\t|-Available: ");
 
                         var strs = AuthorizedServers.Select(x => $"\t\t|-<{x.Value.Tag}> ({x.Value.IP}:{x.Value.Port})");
@@ -117,6 +128,7 @@ namespace UdpReceiver
                         {
                             Log(item);
                         }
+#endif
 
                         continue;
                     }                    

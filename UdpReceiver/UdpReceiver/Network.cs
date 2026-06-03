@@ -128,12 +128,22 @@ namespace UdpReceiver
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase
             };
 
+            static readonly string[] IgnoredIPEntries = [
+                "localhost",
+                "127.0.0.1",
+            ];
+
             public static byte[] BuildJson(Dictionary<ulong, Server> servers)
             {
                 var list = new List<object>(servers.Count);
 
                 foreach (var x in servers)
                 {
+                    if (IgnoredIPEntries.Contains(x.Value.IP.ToString()))
+                    {
+                        continue;
+                    }
+
                     list.Add(new
                     {
                         name = x.Value.Tag,
