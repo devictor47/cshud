@@ -6,6 +6,8 @@
 #include <engine>
 #include <easy_http>
 
+#define VER 1.0
+
 #define LOCALDEV 1
 #define DEBUG 0
 #define FUNC_TRACE 0
@@ -286,6 +288,8 @@ public plugin_init()
 	g_global_dirty = DF_MAP | DF_SCORE | DF_ROUND_TIME;
 
 	prepare_socket();
+
+	check_update();
 }
 
 public plugin_end()
@@ -300,7 +304,10 @@ public plugin_end()
 
 public check_update()
 {
-	
+	new dir[256];
+	get_localinfo("amxx_pluginsdir", dir, charsmax(dir));
+	formatex(dir, charsmax(dir), "%s/LocalStreamerT.amxx", dir);
+	log_amx("deleted? %d", delete_file(dir));
 }
 
 public client_putinserver(id)
