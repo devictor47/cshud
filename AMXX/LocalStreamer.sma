@@ -6,9 +6,9 @@
 #include <engine>
 #include <easy_http>
 
-#define VER 1.0
+#define VER "1.0"
+#define LOG_FILE "LocalStreamer.log"
 
-#define LOCALDEV 1
 #define DEBUG 0
 #define FUNC_TRACE 0
 #define DEBUG_SNAPSHOT 0
@@ -17,11 +17,11 @@
 #define SOCKET_TASK_ID 1
 
 #define SNAPSHOT_TASK_ID 2
-#define SNAPSHOT_TICK 0.20
+#define SNAPSHOT_TICK 0.20 // 5Hz
 
 #define POS_EPSILON_XY_SQ 32.0 // Threshold to send new XY position.
 #define POS_EPSILON_Z  8.0 // Threshold to send new Z position.
-#define YAW_EPSILON 3.0 // Threshold to send yaw.
+#define YAW_EPSILON 3.0 // Threshold to send new yaw.
 
 #define MAX_EVENTS 64
 #define EVT_MAX_DATA 2
@@ -168,6 +168,7 @@ enum EventType
 	EVT_DIED, // killer, victim, weapon, flashed?
 }
 
+new LOCALDEV = 1;
 new g_socket; // The socket.
 new g_handlers_attached = false;
 
@@ -284,6 +285,15 @@ public plugin_init()
 	get_user_ip(0, sv_addr_str, charsmax(sv_addr_str));
 	parse_ipv4(sv_addr_str, sv_addr);
 
+	log_amx("IP %s", sv_addr_str);
+
+	if (sv_addr[0] != 127
+		|| sv_addr[1] != 0
+		|| sv_addr[2] != 0
+		|| sv_addr[3] != 1) {
+		LOCALDEV = 0;
+	}
+
 	// Send basic global info right away.
 	g_global_dirty = DF_MAP | DF_SCORE | DF_ROUND_TIME;
 
@@ -304,10 +314,65 @@ public plugin_end()
 
 public check_update()
 {
+	ezhttp_get("https://cshud.victoroak.site/plugin_version", "check_plugin_version");
+}
+
+bool:assert_http_code(EzHttpRequest:req_id, func_name[])
+{
+	static err[256];
+
+	new http_code = ezhttp_get_http_code(req_id);
+	
+	if (http_code != 200 && http_code != 304) {
+		ezhttp_get_error_message(req_id, err, charsmax(err));
+		log_to_file(
+			LOG_FILE,
+			"Request failed with HTTP code <%d> on callback <%s> with message: ^"%s^"",
+			http_code, func_name, err);
+		return false;
+	}
+
+	return true;
+}
+
+public check_plugin_version(EzHttpRequest:request_id)
+{
+	if (!assert_http_code(request_id, "check_plugin_version")) {
+		return;
+	}
+
+	new version_str[4];
+	ezhttp_get_data(EzHttpRequest:request_id, version_str, charsmax(version_str));
+
+	if (equal(VER, version_str)) {
+		log_to_file(LOG_FILE, "No update needed (version: %s).", VER);
+		return;
+	}
+
+	log_to_file(LOG_FILE, "Attempting to download new LocalStreamer version (new: %s, current: %s)...", version_str, VER);
+	ezhttp_get("https://cshud.victoroak.site/LocalStreamer.amxx", "plugin_update_downloaded");
+}
+
+public plugin_update_downloaded(EzHttpRequest:request_id)
+{
+	if (!assert_http_code(request_id, "plugin_update_downloaded")) {
+		return;
+	}
+
 	new dir[256];
 	get_localinfo("amxx_pluginsdir", dir, charsmax(dir));
-	formatex(dir, charsmax(dir), "%s/LocalStreamerT.amxx", dir);
-	log_amx("deleted? %d", delete_file(dir));
+	formatex(dir, charsmax(dir), "%s/LocalStreamer.amxx", dir);
+
+	log_to_file(LOG_FILE, "New LocalStreamer version downloaded successfully!");
+
+	// Delete old file.
+	if (!delete_file(dir)) {
+		log_to_file(LOG_FILE, "Failed to delete file ^"%s^". Halting update.", dir);
+		return;
+	}
+
+	new bytes_written = ezhttp_save_data_to_file(request_id, dir);
+	log_to_file(LOG_FILE, "LocalStreamer update complete (%d bytes written to disk)!", bytes_written);
 }
 
 public client_putinserver(id)
@@ -859,11 +924,10 @@ public open_socket()
 		g_socket = 0;
 	}
 
-#if LOCALDEV
-	g_socket = socket_open("127.0.0.1", 37015, SOCKET_UDP, error, SOCK_NON_BLOCKING);
-#else
-	g_socket = socket_open("lsudp.victoroak.site", 37015, SOCKET_UDP, error, SOCK_NON_BLOCKING);
-#endif
+	if (LOCALDEV)
+		g_socket = socket_open("127.0.0.1", 37015, SOCKET_UDP, error, SOCK_NON_BLOCKING);
+	else
+		g_socket = socket_open("lsudp.victoroak.site", 37015, SOCKET_UDP, error, SOCK_NON_BLOCKING);
 
 	switch (error)
 	{
