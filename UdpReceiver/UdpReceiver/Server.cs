@@ -49,5 +49,13 @@ namespace UdpReceiver
             //   FlashedId = [000...] [ ip ] [port]
             return ((ulong)ipAsInt << 16) | port;
         }
+
+    }
+
+    internal class ServerQuery
+    {
+        public string Map = "";
+
+        public int NumPlayers;
     }
 }

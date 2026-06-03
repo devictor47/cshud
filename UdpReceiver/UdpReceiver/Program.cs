@@ -19,6 +19,9 @@ namespace UdpReceiver
 
         static readonly ConcurrentDictionary<IWebSocketConnection, ulong> ConnectedClients = new();
 
+        static readonly ConcurrentDictionary<ulong, ServerQuery> OnlineServers =
+            new(AuthorizedServers.Count, AuthorizedServers.Count);
+
         static async Task Main()
         {
             var cts = new CancellationTokenSource();
@@ -387,6 +390,8 @@ namespace UdpReceiver
 
                 _ = SendToClient(ws, payload, server.Context);
             }
+
+            OnlineServers[server.Id] = server.Context.State.QueryServer();
         }
 
         static async Task SendToClient(IWebSocketConnection ws, byte[] payload, ServerContext? context = null)
@@ -536,7 +541,7 @@ namespace UdpReceiver
 
                             _ = SendToClient(
                                 socket,
-                                WsJsonResponses.ListServers.BuildJson(AuthorizedServers)
+                                WsJsonResponses.ListServers.BuildJson(AuthorizedServers, OnlineServers)
                             );
 
                             break;

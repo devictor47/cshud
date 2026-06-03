@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Buffers;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel.Design.Serialization;
 using System.Diagnostics;
@@ -133,22 +134,30 @@ namespace UdpReceiver
                 "127.0.0.1",
             ];
 
-            public static byte[] BuildJson(Dictionary<ulong, Server> servers)
+            public static byte[] BuildJson(Dictionary<ulong, Server> servers, ConcurrentDictionary<ulong, ServerQuery> onlineServers)
             {
                 var list = new List<object>(servers.Count);
 
                 foreach (var x in servers)
                 {
-                    if (IgnoredIPEntries.Contains(x.Value.IP.ToString()))
+                    if (OperatingSystem.IsLinux())
                     {
-                        continue;
+                        if (IgnoredIPEntries.Contains(x.Value.IP.ToString()))
+                        {
+                            continue;
+                        }
                     }
 
-                    list.Add(new
+                    if (onlineServers.TryGetValue(x.Value.Id, out var query))
                     {
-                        name = x.Value.Tag,
-                        id = x.Value.Id
-                    });
+                        list.Add(new
+                        {
+                            name = x.Value.Tag,
+                            id = x.Value.Id,
+                            map = query.Map,
+                            players = query.NumPlayers,
+                        });
+                    }
                 }
 
                 var response = new

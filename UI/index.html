@@ -74,7 +74,18 @@
             const el = document.createElement("div");
 
             el.className = "server";
-            el.textContent = `${s.name}`;
+
+            if (s.map) {
+                if (!s.map.startsWith("loading")) {                    
+                    el.textContent = `${s.name} - ${s.map} - ${s.players ? s.players + " online" : ""}`;
+                }
+                else {
+                    el.textContent = `${s.name} - waiting for server info...`;
+                }
+            }
+            else {
+                el.textContent = `${s.name}`;
+            }
 
             el.onclick = () => {
                 window.location.href = `server.html?sv=${s.id}`;

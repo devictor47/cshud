@@ -169,6 +169,21 @@ window.Consts = (() => {
                 loading: "Aguardando dados do servidor..."
             },
             map: "Mapa",
+            chat: {
+                kill: (killer, victim, weapon, headshot, blind) =>{
+
+                    let message;
+
+                    if (headshot) {
+                        message = `${killer} deu um headshot em ${victim} com ${weapon}`;
+                    }
+                    else {
+                        message = `${killer} matou ${victim} com ${weapon}`;
+                    }
+
+                    return message;
+                },
+            }
         }
     });
 

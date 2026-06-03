@@ -383,6 +383,114 @@ window.Chat = (() => {
         addEntryToChat(chatEntry);
     }
 
+    function addKillLocale(killEvent) {
+
+        const chatEntry = buildChatEntry();
+
+        const msg = document.createElement("span");
+
+        const killer = document.createElement("span");
+
+        switch (killEvent.killerTeam) {
+            case 1:
+                killer.className = "player t";
+                break;
+            case 2:
+                killer.className = "player ct";
+                break;
+            default:
+                killer.className = "player";
+                break;
+        }
+
+        killer.textContent = killEvent.killerName;
+
+        msg.append(killer);
+
+        if (killEvent.assistantName) {
+
+            const assistant = document.createElement("span");
+            
+            switch (killEvent.assistantTeam) {
+                case 1:
+                    assistant.className = "player t";
+                    break;
+                case 2:
+                    assistant.className = "player ct";
+                    break;
+                default:
+                    assistant.className = "player";
+                    break;
+            }
+
+            assistant.textContent = killEvent.assistantName;
+
+            msg.append(" + ", assistant);
+        }
+
+        const victim = document.createElement("span");
+        
+        switch (killEvent.victimTeam) {
+            case 1:
+                victim.className = "player t";
+                break;
+            case 2:
+                victim.className = "player ct";
+                break;
+            default:
+                victim.className = "player";
+                break;
+        }
+        
+        victim.textContent = killEvent.victimName;
+
+        if (killEvent.rarity & Consts.KILL_RARITY.HEADSHOT) {
+            const hs = document.createElement("span");
+            hs.className = "emphasis";
+            hs.textContent = " headshot ";
+            msg.append(hs);
+        }
+        else {
+
+            if (killEvent.rarity & Consts.KILL_RARITY.KILLER_BLIND) {
+                const hs = document.createElement("span");
+                hs.className = "emphasis";
+                hs.textContent = " BLIND-killed ";
+                 msg.append(hs);
+            }
+            else {
+                msg.append(" killed ");
+            }
+        }
+
+        const weaponPart = document.createElement("span");
+        weaponPart.className = "kill-weapon";
+
+        weaponPart.append(
+            `with ${Chat.getArticleFor(killEvent.weapon.name)} ${killEvent.weapon.name}`,
+        );
+
+        try {
+            const wepIco = IconAssets.createWeaponIcon(killEvent.weapon.id);
+            weaponPart.append(wepIco);
+        }
+        catch (err) {
+            console.error(`Failed to add weapon icon to kill event message: ${err}`);
+        }
+        
+        msg.append(
+            victim,
+            " ",
+            weaponPart
+        );
+
+
+        chatEntry.msg.append(msg);
+
+        addEntryToChat(chatEntry);
+    }
+
+
     return {
         getArticleFor,
         addLog,

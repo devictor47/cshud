@@ -23,6 +23,9 @@ namespace UdpReceiver
         private readonly PlayerState?[] players =
             new PlayerState[Program.MAX_PLAYERS + 1];
 
+        private ServerQuery? ServerQueryCached;
+        private long ServerQueryTimestamp;
+
         public void ApplySnapshot(Snapshot snapshot)
         {
             lock (stateLock)
@@ -162,6 +165,25 @@ namespace UdpReceiver
 
                 return new PlayerState(p);
             }
+        }
+
+        public ServerQuery QueryServer()
+        {
+            long now = Stopwatch.GetTimestamp();
+
+            if (ServerQueryCached == null
+                || now - ServerQueryTimestamp >  Stopwatch.Frequency * 15)
+            {
+                ServerQueryCached = new ServerQuery
+                {
+                    Map = Map ?? "loading...",
+                    NumPlayers = players.Count(x => x != null)
+                };
+
+                ServerQueryTimestamp = now;
+            }
+
+            return ServerQueryCached!;
         }
     }
 
