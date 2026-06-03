@@ -298,7 +298,10 @@ public plugin_end()
 		socket_close(g_socket);
 }
 
-
+public check_update()
+{
+	
+}
 
 public client_putinserver(id)
 {
