@@ -170,19 +170,19 @@ window.Consts = (() => {
             },
             map: "Mapa",
             chat: {
-                kill: (killer, victim, weapon, headshot, blind) =>{
+                // kill: (killer, victim, weapon, headshot, blind) =>{
 
-                    let message;
+                //     let message;
 
-                    if (headshot) {
-                        message = `${killer} deu um headshot em ${victim} com ${weapon}`;
-                    }
-                    else {
-                        message = `${killer} matou ${victim} com ${weapon}`;
-                    }
+                //     if (headshot) {
+                //         message = `${killer} deu um headshot em ${victim} com ${weapon}`;
+                //     }
+                //     else {
+                //         message = `${killer} matou ${victim} com ${weapon}`;
+                //     }
 
-                    return message;
-                },
+                //     return message;
+                // },
             }
         }
     });

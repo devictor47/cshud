@@ -746,6 +746,10 @@
                     switch (event.type) {
 
                         case Consts.EVENT_TYPE.ROUND_ENDED:
+                            if (State.c4Running()) {
+                                ScoreboardUI.hideC4Timer();
+                                State.c4Clear();
+                            }
                             break;
 
                         case Consts.EVENT_TYPE.DIED:
@@ -830,7 +834,7 @@
 
                         case Consts.EVENT_TYPE.BOMB_EXPLODED:
                             // p = planter id; d = defuser id, if any.
-                            //State.c4Exploded();
+                            State.c4Exploded();
 
                             if (!event.d)
                                 Chat.addBombExploded(State.players[event.p]?.name);
@@ -923,8 +927,18 @@
 
                 return function (now, delta) {
 
-                    if (!State.c4Running())
+                    if (!State.c4Running()) {
+                        if (left !== null) {
+                            // C4 timer was running,
+                            // but it was stopped without exploding.
+                            // Maybe round ended with kills, or it
+                            // was defused.
+                            left = null;
+                            ScoreboardUI.hideC4Timer();
+                            State.c4Clear();
+                        }
                         return;
+                    }
 
                     if (left === null) {
                         ScoreboardUI.showC4Timer();

@@ -247,7 +247,11 @@ const State = (() => {
         c4Exploded,
         c4Running: () => state.c4.timeLeft !== null,
         c4TimeLeft: () => state.c4.timeLeft,
-        c4StartedAt: () => state.c4.startedAt
+        c4StartedAt: () => state.c4.startedAt,
+        c4Clear: () => {
+            state.c4.timeLeft = null;
+            state.c4.startedAt = null;
+        }
     };
 
 })();
