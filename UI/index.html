@@ -77,7 +77,7 @@
 
             if (s.map) {
                 if (!s.map.startsWith("loading")) {                    
-                    el.textContent = `${s.name} - ${s.map} - ${s.players ? s.players + " online" : ""}`;
+                    el.textContent = `${s.name} - ${s.map} - ${s.players} online`;
                 }
                 else {
                     el.textContent = `${s.name} - waiting for server info...`;
