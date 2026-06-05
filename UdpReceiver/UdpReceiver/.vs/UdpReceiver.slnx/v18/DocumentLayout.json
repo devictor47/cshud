@@ -3,6 +3,10 @@
   "WorkspaceRootPath": "C:\\Users\\victo\\OneDrive\\Vs Projects\\CS 1.6\\cshud\\UdpReceiver\\UdpReceiver\\",
   "Documents": [
     {
+      "AbsoluteMoniker": "D:0:0:{622F0840-5401-DBE9-EDE6-3012AB861D56}|UdpReceiver.csproj|c:\\users\\victo\\onedrive\\vs projects\\cs 1.6\\cshud\\udpreceiver\\udpreceiver\\enums.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{622F0840-5401-DBE9-EDE6-3012AB861D56}|UdpReceiver.csproj|solutionrelative:enums.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{622F0840-5401-DBE9-EDE6-3012AB861D56}|UdpReceiver.csproj|c:\\users\\victo\\onedrive\\vs projects\\cs 1.6\\cshud\\udpreceiver\\udpreceiver\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{622F0840-5401-DBE9-EDE6-3012AB861D56}|UdpReceiver.csproj|solutionrelative:program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
@@ -22,7 +26,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 446,
-          "SelectedChildIndex": 3,
+          "SelectedChildIndex": 1,
           "Children": [
             {
               "$type": "Bookmark",
@@ -30,7 +34,20 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 0,
+              "Title": "Enums.cs",
+              "DocumentMoniker": "C:\\Users\\victo\\OneDrive\\Vs Projects\\CS 1.6\\cshud\\UdpReceiver\\UdpReceiver\\Enums.cs",
+              "RelativeDocumentMoniker": "Enums.cs",
+              "ToolTip": "C:\\Users\\victo\\OneDrive\\Vs Projects\\CS 1.6\\cshud\\UdpReceiver\\UdpReceiver\\Enums.cs",
+              "RelativeToolTip": "Enums.cs",
+              "ViewState": "AgIAAKQAAAAAAAAAAAAkwLgAAAAIAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-05T13:02:36.548Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
               "Title": "Events.cs",
               "DocumentMoniker": "C:\\Users\\victo\\OneDrive\\Vs Projects\\CS 1.6\\cshud\\UdpReceiver\\UdpReceiver\\Events.cs",
               "RelativeDocumentMoniker": "Events.cs",
@@ -43,7 +60,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 2,
               "Title": "ServerState.cs",
               "DocumentMoniker": "C:\\Users\\victo\\OneDrive\\Vs Projects\\CS 1.6\\cshud\\UdpReceiver\\UdpReceiver\\ServerState.cs",
               "RelativeDocumentMoniker": "ServerState.cs",
@@ -56,13 +73,13 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 1,
               "Title": "Program.cs",
               "DocumentMoniker": "C:\\Users\\victo\\OneDrive\\Vs Projects\\CS 1.6\\cshud\\UdpReceiver\\UdpReceiver\\Program.cs",
               "RelativeDocumentMoniker": "Program.cs",
               "ToolTip": "C:\\Users\\victo\\OneDrive\\Vs Projects\\CS 1.6\\cshud\\UdpReceiver\\UdpReceiver\\Program.cs",
               "RelativeToolTip": "Program.cs",
-              "ViewState": "AgIAAIsEAAAAAAAAAIAwwOQEAAA2AAAAAAAAAA==",
+              "ViewState": "AgIAAG0BAAAAAAAAAAAxwL4DAABTAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-05-19T19:33:30.314Z",
               "EditorCaption": ""
