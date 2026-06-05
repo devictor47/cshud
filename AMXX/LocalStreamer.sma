@@ -6,7 +6,7 @@
 #include <engine>
 #include <easy_http>
 
-#define VER "1.0"
+#define VER "1.1"
 #define LOG_FILE "LocalStreamer.log"
 
 #define DEBUG 0
