@@ -16,6 +16,9 @@ namespace UdpReceiver
 
         public readonly AwaitablePacketRingBuffer PacketQueue = new(256);
 
+        // TODO
+        // public bool IsRecording = false;
+
         public void AddClient(IWebSocketConnection ws)
         {
             lock (clientsLock)

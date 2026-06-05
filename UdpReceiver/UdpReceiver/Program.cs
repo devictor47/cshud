@@ -237,6 +237,18 @@ namespace UdpReceiver
                             {
                                 server.Context.State.ApplySnapshot(snapshot);
                                 _ = Broadcast(server, snapshot);
+
+                                // TODO - recording feat
+                                //if (server.Context.IsRecording)
+                                //{
+                                //    server.Context.ReplayQueue.Enqueue(
+                                //        new ReplayPacket
+                                //        {
+                                //            Buffer = recvBuffer,
+                                //            Length = received,
+                                //            Timestamp = Stopwatch.GetTimestamp()
+                                //        });
+                                //}
                             }
                         }
                         finally

@@ -21,7 +21,7 @@ window.DOM = (() => {
         },
 
         chat: {
-            sayEl: document.getElementById("say-chat"),
+            sayEl: document.getElementById("say-chat-content"),
             tChatEl: document.getElementById("t-chat"),
             ctChatEl: document.getElementById("ct-chat"),
         },

@@ -80,7 +80,7 @@ window.Chat = (() => {
 
     function addEntryToChat(entry) {
         DOM.chat.sayEl.appendChild(entry.line);
-        DOM.chat.sayEl.scrollTop = DOM.chat.sayEl.scrollHeight;
+        DOM.chat.sayEl.parentElement.scrollTop = DOM.chat.sayEl.parentElement.scrollHeight;
     }
 
     function addLog(message) {
@@ -323,28 +323,37 @@ window.Chat = (() => {
     function _addSay(type, name, message, team, alive) {
 
         const chatEntry = buildChatEntry();
+        chatEntry.line.classList.add("is-chat");
 
         const msg = document.createElement("span");
 
         const player = document.createElement("span");
         player.textContent = name;
 
-        let chatEl = type == "say" ? DOM.chat.sayEl : null;
-        let prefix = !alive ? "[DEAD] " : "";
+        const prefix = document.createElement("span");
+        prefix.className = "emphasis";
+
+        let chatEl = DOM.chat.sayEl;
+        prefix.textContent = !alive ? "[DEAD] " : "";
 
         switch (team) {
              case 1:
                 player.className = "player t";
-                chatEl = chatEl || DOM.chat.tChatEl;
+                if (type === "say_team")
+                    chatEl = DOM.chat.tChatEl;
                 break;
             case 2:
                 player.className = "player ct";
-                chatEl = chatEl || DOM.chat.ctChatEl;
+                if (type === "say_team")
+                    chatEl = DOM.chat.ctChatEl;
                 break;
             default:
                 player.className = "player";
-                chatEl = chatEl || DOM.chat.sayEl;
-                prefix = "[SPEC] ";
+
+                prefix.textContent = type === "say"
+                    ? "[SAY - SPEC] "
+                    : "[TEAM - SPEC] ";
+
                 break;
         }
 
@@ -391,7 +400,17 @@ window.Chat = (() => {
         addBombDefused,
         addPlayerFlashed,
         addSay,
-        addSayTeam
+        addSayTeam,
+        hideLogEntries: () => {
+            document
+            .querySelectorAll(".line:not(.is-chat)")
+            .forEach(el => el.classList.add("hide"));
+        },
+        showLogEntries: () => {
+            document
+            .querySelectorAll(".line:not(.is-chat)")
+            .forEach(el => el.classList.remove("hide"));
+        },
     };
 
 })();
