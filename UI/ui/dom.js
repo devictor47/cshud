@@ -22,6 +22,8 @@ window.DOM = (() => {
 
         chat: {
             sayEl: document.getElementById("say-chat"),
+            tChatEl: document.getElementById("t-chat"),
+            ctChatEl: document.getElementById("ct-chat"),
         },
 
         overlays: {

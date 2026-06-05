@@ -249,8 +249,8 @@ const State = (() => {
         c4TimeLeft: () => state.c4.timeLeft,
         c4StartedAt: () => state.c4.startedAt,
         c4Clear: () => {
-            state.c4.timeLeft = null;
-            state.c4.startedAt = null;
+            // Just reset statuses.
+            c4Exploded();
         }
     };
 

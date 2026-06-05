@@ -110,7 +110,7 @@ window.IconAssets = (() => {
             return;
 
         const path =
-            `hud/csgo-icons/svg_normal/${iconName}.svg`;
+            `hud/weapons/${iconName}.svg`;
 
         const res = await fetch(path);
 
@@ -213,13 +213,80 @@ window.IconAssets = (() => {
 
     })();
 
+    const loadFeedIcon = (() => {
+
+        const cache = new Map();
+
+        const loadFc = async function (icon) {
+
+            if (!icon)
+                return;
+
+            const path = icon.path;
+
+            const res = await fetch(path);
+
+            if (!res.ok)
+                throw new Error(`Failed to load ${icon.name}`);
+
+            console.log("Loaded ", icon.name);
+            const text = await res.text();
+
+            const template = document.createElement("template");
+            template.innerHTML = text;
+
+            const svg = template.content.querySelector("svg");
+
+            svg.style.overflow = "visible";
+
+            svg.classList.add("icon");
+
+            svg.setAttribute(
+                "preserveAspectRatio",
+                "xMaxYMid meet"
+            );
+
+            cache.set(icon.name, svg);            
+        };
+
+        loadFc.cache__ = cache;
+        return loadFc;
+    })();
+
+    async function preloadFeedIcons() {
+
+        const loads = [];
+
+        for (const icon of Object.values(Consts.FEED_ICONS)) {
+            loads.push(loadFeedIcon(icon));
+        }
+
+        await Promise.all(loads);
+    }
+
+    function createFeedIcon(icon) {
+
+        const iconName = icon.name;
+
+        if (!iconName)
+            return missingWeaponIcon();
+
+        const svg = loadFeedIcon.cache__.get(iconName);
+
+        return svg
+            ? svg.cloneNode(true)
+            : missingWeaponIcon();
+    }
+
     return {
         VEST_SRC: "hud/vest.png",
         VESTHELM_SRC: "hud/vesthelm.png",
         createWeaponIcon,
         createItemIcon,
+        createFeedIcon,
         Init: async () => {
             await preloadWeaponIcons();
+            await preloadFeedIcons();
         }
     };
 })();

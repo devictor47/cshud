@@ -28,6 +28,9 @@
 #define EVT_TYPE 0
 #define EVT_DATA1 1
 #define EVT_DATA2 2
+#define EVT_DATA_LEN 1
+#define CHAT_MAX_SIZE 128
+#define CHAT_RING_BUFFER_SIZE 256
 
 // Index of the buffer where the player packet starts ([P] tag).
 // Write player packet tag.
@@ -80,6 +83,7 @@ new const g_global_events_names[][] = {
 	"BOMB DEFUSED", "BOMB EXPLODED",
 	"PL BLINDED",
 	"PL DIED",
+	"SAY", "SAY TEAM"
 };
 #endif
 
@@ -166,6 +170,9 @@ enum EventType
 	EVT_FLASHED,
 
 	EVT_DIED, // killer, victim, weapon, flashed?
+
+	EVT_SAY,
+	EVT_SAY_TEAM,
 }
 
 new LOCALDEV = 1;
@@ -234,8 +241,13 @@ new const g_event_size[] =
 
 	8, // EVT_FLASHED
 
-	4 // EVT_DIED
+	4, // EVT_DIED
+	
+	0, // EVT_SAY 0 indicates variable size, and DATA1 contains actual size
+	0, // EVT_SAY_TEAM
 };
+
+new g_chat_messages[CHAT_RING_BUFFER_SIZE][CHAT_MAX_SIZE];
 
 new sv_addr_str[22];
 new sv_addr[5];
@@ -273,8 +285,52 @@ parse_ipv4(const addr_str[], addr[])
     addr[addr_part] = octet;
 }
 
+public on_say(id)
+{
+	static msg[CHAT_MAX_SIZE]; // ReGameDLL -> client.cpp@756
+	new len = read_argv(1, msg, charsmax(msg));
+	//log_amx("push_chat_event(%d,%s,%d,false)", id, msg, len);
+	push_chat_event(id, msg, len, false);
+}
+
+public on_say_team(id)
+{
+	static msg[CHAT_MAX_SIZE];
+	new len = read_argv(1, msg, charsmax(msg));
+	//log_amx("push_chat_event(%d,%s,%d,true)", id, msg, len);
+	push_chat_event(id, msg, len, true);
+}
+
+push_chat_event(id, msg[], len, bool:team = false)
+{
+	static msg_id = 0;
+
+	if (len == 0)
+		return;
+
+	copy(g_chat_messages[msg_id], charsmax(g_chat_messages[]), msg);
+
+	// For variable size events, DATA1 must contain the actual size.
+	// 6 bits for id + 2 bits for team, the rest for the message id.
+	push_event(team ? EVT_SAY_TEAM : EVT_SAY, len,
+		(id - 1) 								// 5 bits (0-31) -> must add 1 on parser
+		| (_:g_cached_teams[id] << 5)	// 2 bits (4 values for 4 possible teams)
+		| (is_user_alive(id) << 7)		// 1 bit for dead/alive
+		| (msg_id << 8));				// remaining 23 bits
+
+	if (msg_id == CHAT_RING_BUFFER_SIZE - 1) {
+		msg_id = -1;
+	}
+
+	msg_id++;
+	//log_amx("msg_id = %d", msg_id);
+}
+
 public plugin_init()
 {
+	register_clcmd("say", "on_say");
+	register_clcmd("say_team", "on_say_team");
+
 	#if FUNC_TRACE
 	log_amx("plugin_init()");
 	build_msg_name_table();
@@ -1196,16 +1252,27 @@ bool:build_events_packet(buffer[], &len, max_len)
 	#endif
 
 	new events_written = 0;
-	new type, size;
+	new type, size, evt_var_size;
 
 	for (new i = 0; i < g_event_count; i++) {
 
 		type = g_events[i][EVT_TYPE];
 		size = g_event_size[type];
 
-		// +1 to count type plus data size.
-		if (len + size + 1 > max_len) {
-			break;
+		if (size > 0) {
+			// +1 to count type plus data size.
+			if (len + size + 1 > max_len) {
+				break;
+			}
+		}
+		else {
+			// Variable size events.
+			evt_var_size = g_events[i][EVT_DATA_LEN];
+
+			// +1 for type, +1 for player id, +1 for event size
+			if (len + evt_var_size + 1 + 1 + 1 > max_len) {
+				break;
+			}
 		}
 
 		buffer[len++] = type;
@@ -1214,22 +1281,21 @@ bool:build_events_packet(buffer[], &len, max_len)
 		{
 			case 2:
 			{
-				// EVT_BOMB_EXPLODED
 				write_u16(buffer, len, g_events[i][EVT_DATA1]);
 			}
 			case 4:
 			{
-				// EVT_DIED
 				write_u32(buffer, len, g_events[i][EVT_DATA1]);
 			}
 			case 8:
 			{
-				// EVT_BOMB_DROPPED, EVT_BOMB_PLANTED
-
 				if (type == _:EVT_BOMB_PLANTED) {
 
 					// Calculated time left to explode from packet tick.
 					// in bits 6 to 15 (10 bits - upto 1023, more than enough);
+					// 6 bits (0-5) = id
+					// 10 bits (6-15) = tick of explosion
+					// 16 bits (16-31) = plant coord X
 					g_events[i][EVT_DATA1] |= (
 						(max(
 							0,
@@ -1240,7 +1306,31 @@ bool:build_events_packet(buffer[], &len, max_len)
 				}
 
 				write_u32(buffer, len, g_events[i][EVT_DATA1]);
-				write_u32(buffer, len, g_events[i][EVT_DATA2]);
+				write_u32(buffer, len, g_events[i][EVT_DATA2]); // Coords Y and Z.
+			}
+			case 0:
+			{
+				// Variable size events.
+				if (type == _:EVT_SAY  || type == _:EVT_SAY_TEAM) {
+
+					// 5 bits (0-31) -> must add 1 on parser;
+					// 2 bits (4 values for 4 possible teams);
+					// 1 bit for dead/alive;
+					// remaining 23 bits are for the message id.
+					new packed = g_events[i][EVT_DATA2];
+
+					buffer[len++] = packed & 0xFF; // Extract id, team and dead/alive from the event DATA2.
+					buffer[len++] = evt_var_size; // 1 byte for the actual message len.
+
+					// Get message id.
+					packed = packed >> 8;
+
+					// Copy the actual message.
+					new idx = 0;
+					while (idx < evt_var_size) {
+						buffer[len++] = g_chat_messages[packed][idx++];
+					}
+				}
 			}
 			default:
 			{
@@ -1439,10 +1529,11 @@ public send_snapshot()
 
 		last_refresh_time = tick_now;
 
-		// 8 slices total.
-		// Players 1,9,17,25 on phase 0
-		// Players 2,10,18,26 on phase 1
-		// etc.
+		// 4 slices total (0, 1, 2, 3, 0, 1, 2, 3, 0...).
+		// Slice 0: 0, 4,  8, 12, 16, 20, 24, 28
+		// Slice 1: 1, 5,  9, 13, 17, 21, 25, 29
+		// Slice 2: 2, 6, 10, 14, 18, 22, 26, 30
+		// Slice 3: 3, 7, 11, 15, 19, 23, 27, 31
 		for (new i = 1; i <= MAX_CLIENTS; i++) {
 
 			if (!is_user_connected(i))

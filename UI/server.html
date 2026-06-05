@@ -285,6 +285,10 @@
             direction: rtl;
         }
 
+        #t-column .row .player-name {
+            direction: ltr;
+        }
+
         .row-1 {
             grid-template-columns: minmax(0, 1fr) max-content max-content;
             grid-column-gap: 6px;
@@ -522,7 +526,10 @@
         .chat .kill-weapon {
             display: inline-flex;
             align-items: center;
-            gap: 4px;
+            gap: 8px;
+            vertical-align: middle;
+            margin-left: 6px;
+            margin-right: 6px;
         }
 
         .chat .kill-weapon svg {
@@ -726,11 +733,7 @@
 
                 players.forEach(player => {
 
-                    if (player.drop === true
-                        || (player.team !== undefined
-                            && player.team !== 1
-                            && player.team !== 2)
-                    ) {
+                    if (player.drop === true) {
                         State.removePlayer(player.id);
                         return;
                     }
@@ -752,7 +755,7 @@
                             }
                             break;
 
-                        case Consts.EVENT_TYPE.DIED:
+                        case Consts.EVENT_TYPE.DIED: {
 
                             // k = killer id
                             // v = victim id
@@ -791,17 +794,17 @@
                                 Chat.addDeath(killer.name, killer.team);
 
                             break;
+                        }
 
                         case Consts.EVENT_TYPE.BOMB_PLANTING:
                             Chat.addBombPlanting(State.players[event.i]?.name);
                             break;
 
                         case Consts.EVENT_TYPE.BOMB_PLANT_ABORTED:
-                            Logger.log("[BOMB PLANT ABORTED]", event);
                             Chat.addBombPlantAborted(State.players[event.i]?.name);
                             break;
 
-                        case Consts.EVENT_TYPE.BOMB_PLANTED:
+                        case Consts.EVENT_TYPE.BOMB_PLANTED: {
                             // i = id of planter
                             // x,y,z = coords
                             // t = time left to explode counting from this packet tick (State.tick).                            
@@ -810,6 +813,7 @@
                             RadarUI.c4DroppedAt(event.x, event.y, event.z, true);
                             Chat.addBombPlanted(State.players[event.i]?.name);
                             break;
+                        }
 
                         case Consts.EVENT_TYPE.BOMB_DROPPED:
                             RadarUI.c4DroppedAt(event.x, event.y, event.z);
@@ -844,7 +848,7 @@
                                     State.players[event.d]?.name);
                             break;
 
-                        case Consts.EVENT_TYPE.FLASHED:
+                        case Consts.EVENT_TYPE.FLASHED: {
                             // v - flashed id (victim)
                             // a - flash thrower (attacker)
                             // f - fade time in seconds
@@ -869,6 +873,15 @@
 
                             Chat.addPlayerFlashed(plFlashed.name, plFlashed.team, plThrower?.name, plThrower?.team);
 
+                            break;
+                        }
+
+                        case Consts.EVENT_TYPE.SAY:                            
+                            Chat.addSay(State.players[event.i]?.name, event.m, event.t, event.a);
+                            break;
+                        
+                        case Consts.EVENT_TYPE.SAY_TEAM:
+                            Chat.addSayTeam(State.players[event.i]?.name, event.m, event.t, event.a);
                             break;
 
                         default:
@@ -906,6 +919,7 @@
 
             State.on("playerRemoved", id => {
                 PlayersUI.remove(id);
+
             });
 
             const _updateRoundTime = (() => {

@@ -145,4 +145,32 @@ namespace UdpReceiver
             Type = EventType.FLASHED;
         }
     }
+
+    sealed class SayEvent : GameEvent
+    {
+        public byte Id;
+        public Team Team;
+        public bool IsAlive;
+        public string Message;
+
+        public SayEvent(string message)
+        {
+            Type = EventType.SAY;
+            Message = message;
+        }
+    }
+
+    sealed class SayTeamEvent : GameEvent
+    {
+        public byte Id;
+        public Team Team;
+        public bool IsAlive;
+        public string Message;
+
+        public SayTeamEvent(string message)
+        {
+            Type = EventType.SAY_TEAM;
+            Message = message;
+        }
+    }
 }

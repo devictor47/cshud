@@ -316,6 +316,7 @@ namespace UdpReceiver
             //  -BOMB_EXPLODED       = 2 bytes (u16 - 2 ids - planter and defuser, if any);
             //  -FLASHED             = 8 bytes (6 bits for victim, 6 bit for thrower, 20 bits for event tick, 11 bits for fade time, 10 bits for hold time, 8 bits for alpha);
             //  -DIED                = 4 bytes (u32);
+            //  -SAY/SAY_TEAM        = 1 byte for meta + string ([5 bits id (must +1 to decode) + 2 bits team + 1 bit dead/alive + 8 bits string len + string])
 
 #if DEBUG
             Console.WriteLine($"Processing packet of {data.Length} bytes...");
@@ -984,6 +985,7 @@ namespace UdpReceiver
                 // FLASHED             = 8 bytes (6 bits for victim, 6 bit for thrower, 20 bits for event tick, 11 bits for fade time, 10 bits for hold time, 8 bits for alpha);
                 // KILL_FLASHBANGED    = 1 byte (u8);
                 // DIED                = 4 bytes (u32);
+                // SAY / SAY_TEAM = 1 byte for meta + string([5 bits id (must +1 to decode) + 2 bits team + 1 bit dead / alive + 8 bits string len + string])
                 var type = (EventType)pReader.ReadU8();
 
                 switch (type)
@@ -1226,6 +1228,38 @@ namespace UdpReceiver
 #endif
                         break;
 
+                    case EventType.SAY:
+                    case EventType.SAY_TEAM:
+                        {
+                            var packed = pReader.ReadU8();
+                            pId = (byte)((packed & 0x1F) + 1);
+                            var team = (Team)((packed & 0x60) >> 5);
+                            bool isAlive = (packed & 0x80) != 0;
+                            var msg = pReader.ReadString();
+
+                            if (type == EventType.SAY)
+                            {
+                                events.Add(new SayEvent(msg)
+                                {
+                                    Id = pId,
+                                    Team = team,
+                                    IsAlive = isAlive,
+                                });
+                            }
+                            else
+                            {
+                                events.Add(new SayTeamEvent(msg)
+                                {
+                                    Id = pId,
+                                    Team = team,
+                                    IsAlive = isAlive,
+                                });
+                            }
+#if DEBUG
+                            logStr.AppendLine($"  |--[CHAT id<{pId}> type<{(type == EventType.SAY ? "say" : "say_team")}> msg<{msg}>]");
+#endif
+                            break;
+                        }
                     default:
                         break;
                 }

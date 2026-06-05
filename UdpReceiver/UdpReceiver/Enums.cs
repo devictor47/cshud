@@ -56,6 +56,9 @@ namespace UdpReceiver
         FLASHED, // EVENT_PLAYER_BLINDED_BY_FLASHBANG
 
         DIED, // killer, victim, assistant, weapon, rarity flags
+
+        SAY,
+        SAY_TEAM
     };
 
     enum PacketType

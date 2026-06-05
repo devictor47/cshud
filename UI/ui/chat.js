@@ -37,6 +37,26 @@ window.Chat = (() => {
         return /^[aeiou]/i.test(word) ? "an" : "a";
     }
 
+    function buildRichNameSpan(name, team) {
+
+        const player = document.createElement("span");
+        player.textContent = name;
+
+        switch (team) {
+            case Consts.TEAM.TERRORIST:
+                player.className = "player t";
+                break;
+            case Consts.TEAM.CT:
+                player.className = "player ct";
+                break;
+            default:
+                player.className = "player";
+                break;
+        }
+
+        return player;
+    }
+
     function buildChatEntry(addTimestamp = true) {
         const line = document.createElement("div");
         const ts = document.createElement("span");
@@ -98,25 +118,15 @@ window.Chat = (() => {
 
     function addGenericTMessage(name, message, emphasiseMsg = false) {
         const chatEntry = buildChatEntry();
-
         const msg = document.createElement("span");
-
-        const player = document.createElement("span");
-        player.className = "player t";
-        player.textContent = name;
-
+        const player = buildRichNameSpan(name, Consts.TEAM.TERRORIST);
         addGenericTeamMessage(player, message, emphasiseMsg);
     }
 
     function addGenericCTMessage(name, message, emphasiseMsg = false) {
         const chatEntry = buildChatEntry();
-
         const msg = document.createElement("span");
-
-        const player = document.createElement("span");
-        player.className = "player ct";
-        player.textContent = name;
-
+        const player = buildRichNameSpan(name, Consts.TEAM.CT);
         addGenericTeamMessage(player, message, emphasiseMsg);
     }
 
@@ -126,133 +136,95 @@ window.Chat = (() => {
 
         const msg = document.createElement("span");
 
-        const killer = document.createElement("span");
-
-        switch (killEvent.killerTeam) {
-            case 1:
-                killer.className = "player t";
-                break;
-            case 2:
-                killer.className = "player ct";
-                break;
-            default:
-                killer.className = "player";
-                break;
-        }
-
-        killer.textContent = killEvent.killerName;
-
+        const killer = buildRichNameSpan(killEvent.killerName, killEvent.killerTeam);
         msg.append(killer);
 
+        // Add the " + ..." if assistant was present.
         if (killEvent.assistantName) {
+            const assistant = buildRichNameSpan(killEvent.assistantName, killEvent.assistantTeam);
 
-            const assistant = document.createElement("span");
-            
-            switch (killEvent.assistantTeam) {
-                case 1:
-                    assistant.className = "player t";
-                    break;
-                case 2:
-                    assistant.className = "player ct";
-                    break;
-                default:
-                    assistant.className = "player";
-                    break;
+            msg.append(" + ");
+
+            if (killEvent.rarity & Consts.KILL_RARITY.ASSISTEDFLASH) {
+                const weaponPart = document.createElement("span");
+                weaponPart.className = "kill-weapon";
+                weaponPart.append(IconAssets.createFeedIcon(Consts.FEED_ICONS.ASSISTEDFLASH));
+                msg.append(weaponPart);
             }
 
-            assistant.textContent = killEvent.assistantName;
-
-            msg.append(" + ", assistant);
+            msg.append(assistant);
         }
 
-        const victim = document.createElement("span");
-        
-        switch (killEvent.victimTeam) {
-            case 1:
-                victim.className = "player t";
-                break;
-            case 2:
-                victim.className = "player ct";
-                break;
-            default:
-                victim.className = "player";
-                break;
-        }
-        
-        victim.textContent = killEvent.victimName;
+        const victim = buildRichNameSpan(killEvent.victimName, killEvent.victimTeam);
 
-        if (killEvent.rarity & Consts.KILL_RARITY.HEADSHOT) {
-            const hs = document.createElement("span");
-            hs.className = "emphasis";
-            hs.textContent = " headshot ";
-            msg.append(hs);
-        }
-        else {
-
-            if (killEvent.rarity & Consts.KILL_RARITY.KILLER_BLIND) {
-                const hs = document.createElement("span");
-                hs.className = "emphasis";
-                hs.textContent = " BLIND-killed ";
-                 msg.append(hs);
-            }
-            else {
-                msg.append(" killed ");
-            }
-        }
+        let flags = killEvent.rarity;
 
         const weaponPart = document.createElement("span");
         weaponPart.className = "kill-weapon";
+        weaponPart.append(IconAssets.createWeaponIcon(killEvent.weapon.id));
+        
+        if (flags) {
+            
+            console.log(flags);
+            do {
 
-        weaponPart.append(
-            `with ${Chat.getArticleFor(killEvent.weapon.name)} ${killEvent.weapon.name}`,
-        );
+                const bit =
+                    flags & -flags;
 
-        try {
-            const wepIco = IconAssets.createWeaponIcon(killEvent.weapon.id);
-            weaponPart.append(wepIco);
-        }
-        catch (err) {
-            console.error(`Failed to add weapon icon to kill event message: ${err}`);
+                switch (bit) {
+                    case Consts.KILL_RARITY.HEADSHOT: {
+                        weaponPart.append(IconAssets.createFeedIcon(Consts.FEED_ICONS.HEADSHOT));
+                        break;
+                    }
+                    case Consts.KILL_RARITY.KILLER_BLIND: {
+                        weaponPart.append(IconAssets.createFeedIcon(Consts.FEED_ICONS.KILLER_BLIND));
+                        break;
+                    }
+                    case Consts.KILL_RARITY.NOSCOPE: {
+                        weaponPart.append(IconAssets.createFeedIcon(Consts.FEED_ICONS.NOSCOPE));
+                        break;
+                    }
+                    case Consts.KILL_RARITY.PENETRATED: {
+                        weaponPart.append(IconAssets.createFeedIcon(Consts.FEED_ICONS.PENETRATED));
+                        break;
+                    }
+                    case Consts.KILL_RARITY.THRUSMOKE: {
+                        weaponPart.append(IconAssets.createFeedIcon(Consts.FEED_ICONS.THRUSMOKE));
+                        break;
+                    }
+                    // case Consts.KILL_RARITY.ASSISTEDFLASH: {
+                    //     weaponPart.append(IconAssets.createFeedIcon(Consts.FEED_ICONS.ASSISTEDFLASH));
+                    //     break;
+                    // }
+                    case Consts.KILL_RARITY.INAIR: {
+                        weaponPart.append(IconAssets.createFeedIcon(Consts.FEED_ICONS.INAIR));
+                        break;
+                    }
+                }
+
+                flags ^= bit;
+
+            } while (flags !== 0);
         }
         
         msg.append(
+            weaponPart,
             victim,
-            " ",
-            weaponPart
         );
 
-
         chatEntry.msg.append(msg);
-
         addEntryToChat(chatEntry);
     }
 
     function addDeath(name, team) {
 
         const chatEntry = buildChatEntry();
-
         const msg = document.createElement("span");
+        const player = buildRichNameSpan(name, team);
 
-        const killer = document.createElement("span");
-
-        switch (team) {
-            case 1:
-                killer.className = "player t";
-                break;
-            case 2:
-                killer.className = "player ct";
-                break;
-            default:
-                killer.className = "player";
-                break;
-        }
-
-        killer.textContent = name;
-
-        msg.append(killer, " died");
+        msg.append(player, " died");
 
         chatEntry.msg.append(msg);
-
         addEntryToChat(chatEntry);
     }
 
@@ -285,9 +257,7 @@ window.Chat = (() => {
 
         const msg = document.createElement("span");
 
-        const player = document.createElement("span");
-        player.className = "player t";
-        player.textContent = planterName;
+        const player = buildRichNameSpan(planterName, Consts.TEAM.TERRORIST);
 
         const bomb = document.createElement("span");
         bomb.className = "emphasis";
@@ -297,9 +267,7 @@ window.Chat = (() => {
             msg.append(player, bomb);
         }
         else {
-            const defuser = document.createElement("span");
-            defuser.className = "player ct";
-            defuser.textContent = defuserName;
+            const defuser = buildRichNameSpan(defuserName, Consts.TEAM.CT);
             msg.append(
             player,
             bomb,
@@ -309,7 +277,6 @@ window.Chat = (() => {
         }        
 
         chatEntry.msg.append(msg);
-
         addEntryToChat(chatEntry);
     }
 
@@ -330,41 +297,12 @@ window.Chat = (() => {
         const chatEntry = buildChatEntry();
 
         const msg = document.createElement("span");
-        const victimEl = document.createElement("span");
-
-        switch (victimTeam) {
-            case 1:
-                victimEl.className = "player t";
-                break;
-            case 2:
-                victimEl.className = "player ct";
-                break;
-            default:
-                victimEl.className = "player";
-                break;
-        }
-
-        victimEl.textContent = victimName;
+        const victimEl = buildRichNameSpan(victimName, victimTeam);
 
         msg.append(victimEl);
 
         if (throwerName) {
-
-            const throwerEl = document.createElement("span");
-
-            switch (throwerTeam) {
-                case 1:
-                    throwerEl.className = "player t";
-                    break;
-                case 2:
-                    throwerEl.className = "player ct";
-                    break;
-                default:
-                    throwerEl.className = "player";
-                    break;
-            }
-
-            throwerEl.textContent = throwerName;
+            const throwerEl = buildRichNameSpan(throwerName, throwerTeam);
 
             msg.append(
                 victimEl,
@@ -383,113 +321,58 @@ window.Chat = (() => {
         addEntryToChat(chatEntry);
     }
 
-    function addKillLocale(killEvent) {
+    function _addSay(type, name, message, team, alive) {
 
         const chatEntry = buildChatEntry();
 
         const msg = document.createElement("span");
 
-        const killer = document.createElement("span");
+        const player = document.createElement("span");
+        player.textContent = name;
 
-        switch (killEvent.killerTeam) {
-            case 1:
-                killer.className = "player t";
+        let chatEl = type == "say" ? DOM.chat.sayEl : null;
+        let prefix = !alive ? "[DEAD] " : "";
+
+        switch (team) {
+             case 1:
+                player.className = "player t";
+                chatEl = chatEl || DOM.chat.tChatEl;
                 break;
             case 2:
-                killer.className = "player ct";
+                player.className = "player ct";
+                chatEl = chatEl || DOM.chat.ctChatEl;
                 break;
             default:
-                killer.className = "player";
+                player.className = "player";
+                chatEl = chatEl || DOM.chat.sayEl;
+                prefix = "[SPEC] ";
                 break;
         }
 
-        killer.textContent = killEvent.killerName;
-
-        msg.append(killer);
-
-        if (killEvent.assistantName) {
-
-            const assistant = document.createElement("span");
-            
-            switch (killEvent.assistantTeam) {
-                case 1:
-                    assistant.className = "player t";
-                    break;
-                case 2:
-                    assistant.className = "player ct";
-                    break;
-                default:
-                    assistant.className = "player";
-                    break;
-            }
-
-            assistant.textContent = killEvent.assistantName;
-
-            msg.append(" + ", assistant);
-        }
-
-        const victim = document.createElement("span");
-        
-        switch (killEvent.victimTeam) {
-            case 1:
-                victim.className = "player t";
-                break;
-            case 2:
-                victim.className = "player ct";
-                break;
-            default:
-                victim.className = "player";
-                break;
-        }
-        
-        victim.textContent = killEvent.victimName;
-
-        if (killEvent.rarity & Consts.KILL_RARITY.HEADSHOT) {
-            const hs = document.createElement("span");
-            hs.className = "emphasis";
-            hs.textContent = " headshot ";
-            msg.append(hs);
-        }
-        else {
-
-            if (killEvent.rarity & Consts.KILL_RARITY.KILLER_BLIND) {
-                const hs = document.createElement("span");
-                hs.className = "emphasis";
-                hs.textContent = " BLIND-killed ";
-                 msg.append(hs);
-            }
-            else {
-                msg.append(" killed ");
-            }
-        }
-
-        const weaponPart = document.createElement("span");
-        weaponPart.className = "kill-weapon";
-
-        weaponPart.append(
-            `with ${Chat.getArticleFor(killEvent.weapon.name)} ${killEvent.weapon.name}`,
-        );
-
-        try {
-            const wepIco = IconAssets.createWeaponIcon(killEvent.weapon.id);
-            weaponPart.append(wepIco);
-        }
-        catch (err) {
-            console.error(`Failed to add weapon icon to kill event message: ${err}`);
-        }
-        
         msg.append(
-            victim,
-            " ",
-            weaponPart
+            prefix,
+            player,
+            ": ",
+            message
         );
-
 
         chatEntry.msg.append(msg);
 
-        addEntryToChat(chatEntry);
+        chatEl.appendChild(chatEntry.line);
+        chatEl.scrollTop = DOM.chat.sayEl.scrollHeight;
     }
 
+    function addSay(name, message, team, alive) {
+        _addSay("say", name, message, team, alive);
+    }
+
+    function addSayTeam(name, message, team, alive) {
+        _addSay("say_team", name, message, team, alive);
+    }
+    
+    function addPlayerDropped(name, team) {
+
+    }
 
     return {
         getArticleFor,
@@ -507,7 +390,9 @@ window.Chat = (() => {
         addBombDefusing,
         addBombDefuseAborted,
         addBombDefused,
-        addPlayerFlashed
+        addPlayerFlashed,
+        addSay,
+        addSayTeam
     };
 
 })();

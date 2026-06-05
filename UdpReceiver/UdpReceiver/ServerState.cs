@@ -610,6 +610,20 @@ namespace UdpReceiver
                             w.WriteNumber("h", b.HoldTime);
                             w.WriteNumber("t", b.Tick);
                             break;
+
+                        case SayEvent b:
+                            w.WriteNumber("i", b.Id);
+                            w.WriteNumber("t", (int)b.Team);
+                            w.WriteBoolean("a", b.IsAlive);
+                            w.WriteString("m", b.Message);
+                            break;
+
+                        case SayTeamEvent b:
+                            w.WriteNumber("i", b.Id);
+                            w.WriteNumber("t", (int)b.Team);
+                            w.WriteBoolean("a", b.IsAlive);
+                            w.WriteString("m", b.Message); 
+                            break;
                     }
 
                     w.WriteEndObject();
