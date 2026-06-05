@@ -165,7 +165,6 @@ window.Chat = (() => {
         
         if (flags) {
             
-            console.log(flags);
             do {
 
                 const bit =

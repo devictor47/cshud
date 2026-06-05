@@ -229,7 +229,6 @@ window.IconAssets = (() => {
             if (!res.ok)
                 throw new Error(`Failed to load ${icon.name}`);
 
-            console.log("Loaded ", icon.name);
             const text = await res.text();
 
             const template = document.createElement("template");
