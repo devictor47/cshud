@@ -321,7 +321,7 @@ window.RadarUI = (() => {
 
         if (remainingMs < 15000) {
             img = icon.imageEnd;
-            entitiesCtx.globalAlpha = Math.max(0.65, remainingMs / 5000);
+            entitiesCtx.globalAlpha = Math.max(0.25, remainingMs / 3000);
         }
 
         entitiesCtx.drawImage(
