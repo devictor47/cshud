@@ -332,12 +332,12 @@ window.RadarUI = (() => {
             icoCache.h
         );
         
-        icoCache.scale = 1 + Math.sin(now * 0.01) * 0.07;
+        icoCache.scale = 1 + Math.sin(now * 0.01) * 0.05;
         icoCache.w = icon.width * icoCache.scale * camera.invZoom;
         icoCache.h = icon.height * icoCache.scale * camera.invZoom;
         icoCache.drawX = -(icoCache.w / 2);
         icoCache.drawY = -(icoCache.h / 2);
-        icoCache.rotation += secondsSinceLast * 0.75;
+        icoCache.rotation += secondsSinceLast * 0.85;
 
         entitiesCtx.globalAlpha = opacity;
 
