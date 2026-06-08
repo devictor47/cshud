@@ -95,8 +95,9 @@ window.RadarUI = (() => {
     // Flag to indicate if we need to fully redraw canvases
     // due to zoom/pan changes or new overview.
     let mapCanvasDirty = false; 
-    let c4dropped = null;
+    let iconsDirty = false;
 
+    let c4dropped = null;
     let overview = null;
 
     function setOverview(overview_) {
@@ -114,6 +115,8 @@ window.RadarUI = (() => {
         mapCanvasDirty = false;
 
         if (!overview) return;
+
+        iconsDirty = true;
 
         // Check current size due to resizing
         // and adjust canvas accordingly.
@@ -231,11 +234,12 @@ window.RadarUI = (() => {
             drawPlayer(player);
         });
 
+        entitiesCtx.globalAlpha = 1.0;
+
         // c4dropped is only set to null
         // when a player has it, in which
         // case it will be drawn inside DrawPlayer.
         if (c4dropped !== null) {
-            entitiesCtx.globalAlpha = 1.0;
             const pos = worldToCanvas(c4dropped.x, c4dropped.y);
 
             if (c4dropped.planted) {
@@ -286,12 +290,19 @@ window.RadarUI = (() => {
 
         let icoCache = icon.cache;
 
-        if (!icoCache || icoCache.zoom !== camera.zoom) {
+        if (!icoCache || iconsDirty) {
+
+            iconsDirty = false;
+
             icon.cache = icoCache = {
                 rotation: Math.random() * Math.PI * 2,
                 scale: 1,
                 zoom: camera.zoom,
             };
+
+            const pos = worldToCanvas(icon.x, icon.y);
+            icoCache.worldX = pos.x;
+            icoCache.worldY = pos.y;
 
             icoCache.w = icon.width * icoCache.scale * camera.invZoom;
             icoCache.h = icon.height * icoCache.scale * camera.invZoom;
@@ -300,24 +311,35 @@ window.RadarUI = (() => {
         }
 
         entitiesCtx.save();
-        entitiesCtx.translate(icon.worldX, icon.worldY);
+        entitiesCtx.translate(icoCache.worldX, icoCache.worldY);
         entitiesCtx.rotate(icon.cache.rotation);
 
-        icoCache.rotation += secondsSinceLast * 0.75;
+        const opacity = entitiesCtx.globalAlpha;
+        
+        let img = icon.imageStart;
+        const remainingMs = icon.removeAt - now;
+
+        if (remainingMs < 15000) {
+            img = icon.imageEnd;
+            entitiesCtx.globalAlpha = Math.max(0.65, remainingMs / 5000);
+        }
 
         entitiesCtx.drawImage(
-            icon.removeAt - now  > 5000 ? icon.imageStart : icon.imageEnd,
+            img,
             icoCache.drawX,
             icoCache.drawY,
             icoCache.w,
             icoCache.h
         );
-
-        icoCache.scale = 1 + Math.sin(now * 0.01) * 0.05;
+        
+        icoCache.scale = 1 + Math.sin(now * 0.01) * 0.07;
         icoCache.w = icon.width * icoCache.scale * camera.invZoom;
         icoCache.h = icon.height * icoCache.scale * camera.invZoom;
         icoCache.drawX = -(icoCache.w / 2);
         icoCache.drawY = -(icoCache.h / 2);
+        icoCache.rotation += secondsSinceLast * 0.75;
+
+        entitiesCtx.globalAlpha = opacity;
 
         entitiesCtx.restore();
     }
@@ -710,8 +732,6 @@ window.RadarUI = (() => {
             c4dropped = {x, y, z, planted};
         },
         addOverviewIcon(x, y, z, width, height, expiryTime, iconStart, iconEnd = null) {
-            
-            const pos = worldToCanvas(x, y);
 
             // TODO - use a not found/missing image icon
             if (!iconStart)
@@ -726,12 +746,13 @@ window.RadarUI = (() => {
                 x,
                 y,
                 z,
-                worldX: pos.x,
-                worldY: pos.y,
                 removeAt: expiryTime
             };
 
             icons.push(ico);
+        },
+        clearIcons: () => {
+            icons.length = 0;
         }
     }
 })();

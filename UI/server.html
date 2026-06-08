@@ -807,6 +807,7 @@
                                 ScoreboardUI.hideC4Timer();
                                 State.c4Clear();
                             }
+                            RadarUI.clearIcons();
                             break;
 
                         case Consts.EVENT_TYPE.DIED: {
@@ -953,7 +954,7 @@
                                 case Consts.TEAM.TERRORIST:
                                     RadarUI.addOverviewIcon(
                                         event.x, event.y, event.z,
-                                        32, 32,
+                                        60, 60,
                                         performance.now() + remaining * 1000,
                                         IconAssets.getOverviewIcon(Consts.OVERVIEW_ICONS.SMOKE_T_START),
                                         IconAssets.getOverviewIcon(Consts.OVERVIEW_ICONS.SMOKE_T));
@@ -961,7 +962,7 @@
                                 case Consts.TEAM.CT:
                                     RadarUI.addOverviewIcon(
                                         event.x, event.y, event.z,
-                                        32, 32,
+                                        60, 60,
                                         performance.now() + remaining * 1000,
                                         IconAssets.getOverviewIcon(Consts.OVERVIEW_ICONS.SMOKE_CT_START),
                                         IconAssets.getOverviewIcon(Consts.OVERVIEW_ICONS.SMOKE_CT));
@@ -969,7 +970,7 @@
                                 default:
                                     RadarUI.addOverviewIcon(
                                         event.x, event.y, event.z,
-                                        32, 32,
+                                        60, 60,
                                         performance.now() + remaining * 1000,
                                         IconAssets.getOverviewIcon(Consts.OVERVIEW_ICONS.SMOKE));
                                     break;

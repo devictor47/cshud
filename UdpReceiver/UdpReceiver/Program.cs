@@ -1,4 +1,4 @@
-﻿#define DEBUG_STAT
+﻿//#define DEBUG_STAT
 
 using Fleck;
 using System.Buffers;
@@ -344,8 +344,10 @@ namespace UdpReceiver
 
             snapshot.Tick = reader.ReadF32();
 
-#if DEBUG
+#if DEBUG_STAT
             Console.WriteLine($"=====<[TICK][{snapshot.Tick:F2}][count: {pcktsRcvd} | avg size: {avgPcktSize:F2} | bytes rcvd: {bytesRcvd}]>=====\n");
+#elif DEBUG
+            Console.WriteLine($"=====<[TICK][{snapshot.Tick:F2}]>=====\n");
 #endif
 
             while (reader.Remaining > 0)
@@ -368,8 +370,10 @@ namespace UdpReceiver
                 }
             }
 
-#if DEBUG
+#if DEBUG_STAT
             Console.WriteLine($"=====</[TICK][{snapshot.Tick:F2}][count: {pcktsRcvd} | avg size: {avgPcktSize:F2} | bytes rcvd: {bytesRcvd}]>=====\n");
+#elif DEBUG
+            Console.WriteLine($"=====<[TICK][{snapshot.Tick:F2}]>=====\n");
 #endif
 
             return snapshot;
