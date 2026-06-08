@@ -16,6 +16,7 @@ window.RadarUI = (() => {
         x: 0,
         y: 0,
         zoom: 1,
+        invZoom: 1,
         isDragging: false,
         lastMouseX: 0,
         lastMouseY: 0
@@ -83,6 +84,8 @@ window.RadarUI = (() => {
             this.c4Y = this.height * 0.5;
         }
     };
+
+    const icons = [];
 
     drawC4Cache.c4Image.src = Consts.OVERVIEW_ICONS.C4.src;
     drawC4PlantedCache.c4Image.src = Consts.OVERVIEW_ICONS.C4_PLANTED.src;
@@ -186,7 +189,7 @@ window.RadarUI = (() => {
         drawC4Cache.updateCache(camera.zoom);
     }
 
-    function drawPlayers(players, timeSinceLast) {
+    function drawPlayers(players, now, timeSinceLast) {
         
         // Clear the canvas.
         entitiesCtx.clearRect(0, 0, entitiesCanvas.width, entitiesCanvas.height);
@@ -263,6 +266,58 @@ window.RadarUI = (() => {
                 );
             }
         }
+
+        for (let i = icons.length - 1; i >= 0; i--) {
+
+            const icon = icons[i];
+
+            if (now >= icon.removeAt) {
+                icons.splice(i, 1);
+                continue;
+            }
+
+            drawIcon(icon, now, timeSinceLast);
+        }
+
+        entitiesCtx.restore();
+    }
+
+    function drawIcon(icon, now, secondsSinceLast) {
+
+        let icoCache = icon.cache;
+
+        if (!icoCache || icoCache.zoom !== camera.zoom) {
+            icon.cache = icoCache = {
+                rotation: Math.random() * Math.PI * 2,
+                scale: 1,
+                zoom: camera.zoom,
+            };
+
+            icoCache.w = icon.width * icoCache.scale * camera.invZoom;
+            icoCache.h = icon.height * icoCache.scale * camera.invZoom;
+            icoCache.drawX = -(icoCache.w / 2);
+            icoCache.drawY = -(icoCache.h / 2);
+        }
+
+        entitiesCtx.save();
+        entitiesCtx.translate(icon.worldX, icon.worldY);
+        entitiesCtx.rotate(icon.cache.rotation);
+
+        icoCache.rotation += secondsSinceLast * 0.75;
+
+        entitiesCtx.drawImage(
+            icon.removeAt - now  > 5000 ? icon.imageStart : icon.imageEnd,
+            icoCache.drawX,
+            icoCache.drawY,
+            icoCache.w,
+            icoCache.h
+        );
+
+        icoCache.scale = 1 + Math.sin(now * 0.01) * 0.05;
+        icoCache.w = icon.width * icoCache.scale * camera.invZoom;
+        icoCache.h = icon.height * icoCache.scale * camera.invZoom;
+        icoCache.drawX = -(icoCache.w / 2);
+        icoCache.drawY = -(icoCache.h / 2);
 
         entitiesCtx.restore();
     }
@@ -351,7 +406,7 @@ window.RadarUI = (() => {
             const fov = 0.785398;  // Abertura do cone em radianos (45 graus)
 
             const grad = entitiesCtx.createRadialGradient(0, 0, r, 0, 0, coneLen);
-            grad.addColorStop(0, player.team === 2 ? 'rgba(1, 110, 208, 1)' : 'rgba(255, 143, 0, 1)');
+            grad.addColorStop(0, player.team === 2 ? '#016ed0' : '#ff8f00');
             grad.addColorStop(1, player.team === 2 ? 'rgba(1, 110, 208, 0.15)' : 'rgba(255, 143, 0, 0.15)');
 
             entitiesCtx.beginPath();
@@ -558,6 +613,7 @@ window.RadarUI = (() => {
 
         // Apply new zoom
         camera.zoom = newZoom;
+        camera.invZoom = 1/newZoom;
 
         // Calculate where the same WORLD point would be with the NEW zoom
         // without moving the camera (hypothetical x=0, y=0)
@@ -652,6 +708,30 @@ window.RadarUI = (() => {
         drawPlayers,
         c4DroppedAt: (x, y, z, planted = false) => {
             c4dropped = {x, y, z, planted};
+        },
+        addOverviewIcon(x, y, z, width, height, expiryTime, iconStart, iconEnd = null) {
+            
+            const pos = worldToCanvas(x, y);
+
+            // TODO - use a not found/missing image icon
+            if (!iconStart)
+                return;
+
+            const ico = {
+                // get an id
+                imageStart: iconStart,
+                imageEnd: iconEnd || iconStart,
+                width,
+                height,
+                x,
+                y,
+                z,
+                worldX: pos.x,
+                worldY: pos.y,
+                removeAt: expiryTime
+            };
+
+            icons.push(ico);
         }
     }
 })();

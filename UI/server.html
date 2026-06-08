@@ -930,6 +930,54 @@
                             break;
                         }
 
+                        case Consts.EVENT_TYPE.SMOKE_EXPLODED: {
+                            // i - owner id
+                            // x - coord
+                            // y - coord
+                            // z - coord
+                            // t - expire tick
+                            const owner = State.players[event.i];
+
+                            if (!owner)
+                                break;
+
+                            const now = GameNowTick(State.time.tick, State.time.receivedAt);
+                            const remaining = event.t - now;
+                            
+                            if (remaining <= 0)
+                                break;
+                            
+                            //PlayersUI.blinded(plFlashed.id, holdLeft, event.f);
+
+                            switch (owner.team) {
+                                case Consts.TEAM.TERRORIST:
+                                    RadarUI.addOverviewIcon(
+                                        event.x, event.y, event.z,
+                                        32, 32,
+                                        performance.now() + remaining * 1000,
+                                        IconAssets.getOverviewIcon(Consts.OVERVIEW_ICONS.SMOKE_T_START),
+                                        IconAssets.getOverviewIcon(Consts.OVERVIEW_ICONS.SMOKE_T));
+                                    break;
+                                case Consts.TEAM.CT:
+                                    RadarUI.addOverviewIcon(
+                                        event.x, event.y, event.z,
+                                        32, 32,
+                                        performance.now() + remaining * 1000,
+                                        IconAssets.getOverviewIcon(Consts.OVERVIEW_ICONS.SMOKE_CT_START),
+                                        IconAssets.getOverviewIcon(Consts.OVERVIEW_ICONS.SMOKE_CT));
+                                    break;
+                                default:
+                                    RadarUI.addOverviewIcon(
+                                        event.x, event.y, event.z,
+                                        32, 32,
+                                        performance.now() + remaining * 1000,
+                                        IconAssets.getOverviewIcon(Consts.OVERVIEW_ICONS.SMOKE));
+                                    break;
+                            }
+
+                            break;
+                        }
+
                         case Consts.EVENT_TYPE.SAY:                            
                             Chat.addSay(State.players[event.i]?.name, event.m, event.t, event.a);
                             break;
@@ -1042,7 +1090,7 @@
                     lastTime = now;
 
                     RadarUI.redraw();
-                    RadarUI.drawPlayers(State.players, timeSinceLast);
+                    RadarUI.drawPlayers(State.players, now, timeSinceLast);
                     
                     updateC4Timer(now, timeSinceLast);
                     _updateRoundTime();

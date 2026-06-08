@@ -988,14 +988,14 @@ namespace UdpReceiver
                 // BOMB_PLANTING       = 1 byte (u8);
                 // BOMB_PLANT_ABORTED  = 1 byte (u8);
                 // BOMB_PLANTED        = 8 bytes (6 bits for id + 10 bits for tick delta + 3 * i16 for (x,y,z));
-                // BOMB_DROPPED        = 8 bytes (1 byte for FlashedId + 3 * i16 for (x,y,z));
+                // BOMB_DROPPED        = 8 bytes (1 byte for player id + 3 * i16 for (x,y,z));
                 // BOMB_PICKED_UP      = 1 byte (1 bit to indicate whether spawned or from the ground, rest for player id);
                 // BOMB_DEFUSING       = 1 byte (u8);
                 // BOMB_DEFUSE_ABORTED = 1 byte (u8); 
                 // BOMB_DEFUSED        = 1 byte (u8);
                 // BOMB_EXPLODED       = 2 bytes (u16 - 2 ids - planter and defuser, if any);
                 // FLASHED             = 8 bytes (6 bits for victim, 6 bit for thrower, 20 bits for event tick, 11 bits for fade time, 10 bits for hold time, 8 bits for alpha);
-                // KILL_FLASHBANGED    = 1 byte (u8);
+                // SMOKE_EXPLODED      = 8 bytes (1 byte for owner id + 3 * i16 for (x,y,z));
                 // DIED                = 4 bytes (u32);
                 // SAY / SAY_TEAM = 1 byte for meta + string([5 bits id (must +1 to decode) + 2 bits team + 1 bit dead / alive + 8 bits string len + string])
                 var type = (EventType)pReader.ReadU8();
@@ -1203,7 +1203,33 @@ namespace UdpReceiver
 
                             break;
                         }
-                    
+
+                    case EventType.SMOKE_EXPLODED:
+                        {
+                            var packed = pReader.ReadU32();
+                            var ownerId = (byte)((packed & 0x1F) + 1);
+                            var expireTickEncoded = (short)(((packed >> 5) & 0x7FF) * 4);
+
+                            var popX = (short)(packed >> 16);
+                            var popY = pReader.ReadI16();
+                            var popZ = pReader.ReadI16();
+
+                            events.Add(new SmokeExplodedEvent
+                            {
+                                Id = ownerId,
+                                X = popX,
+                                Y = popY,
+                                Z = popZ,
+                                ExpireTick = expireTickEncoded
+                            });
+
+#if DEBUG
+                            logStr.AppendLine($"  |--[SMOKE EXPLODED id<{ownerId}> where<{popX},{popY},{popZ}>]");
+#endif
+
+                            break;
+                        }
+
                     case EventType.DIED:
 
                         var deathInfo = pReader.ReadU32();

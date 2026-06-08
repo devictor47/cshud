@@ -6,7 +6,7 @@
 #include <engine>
 #include <easy_http>
 
-#define VER "1.1"
+#define VER "1.3"
 #define LOG_FILE "LocalStreamer.log"
 
 #define DEBUG 0
@@ -81,7 +81,7 @@ new const g_global_events_names[][] = {
 	"BOMB DROPPED", "BOMB PICKED UP",
 	"BOMB DEFUSING", "BOMB DEFUSE ABORTED",
 	"BOMB DEFUSED", "BOMB EXPLODED",
-	"PL BLINDED",
+	"PL BLINDED", "SMOKE EXPLODED"
 	"PL DIED",
 	"SAY", "SAY TEAM"
 };
@@ -168,6 +168,7 @@ enum EventType
 	EVT_BOMB_EXPLODED,
 
 	EVT_FLASHED,
+	EVT_SMOKE_EXPLODED,
 
 	EVT_DIED, // killer, victim, weapon, flashed?
 
@@ -240,6 +241,8 @@ new const g_event_size[] =
 	2, // EVT_BOMB_EXPLODED
 
 	8, // EVT_FLASHED
+
+	8, // EVT_SMOKE_EXPLODED
 
 	4, // EVT_DIED
 	
@@ -682,7 +685,7 @@ public death_msg(msg_id, msg_dest, id)
 	// rarity       = 10 bits (KillRarity has 10 values)
 	// total        = 32 bits = 4 bytes.
 	new data = (killer & 0x3F)
-		| ((victim - 1 & 0x1F) << 6)
+		| (((victim - 1) & 0x1F) << 6)
 		| ((assistant & 0x3F) << 11)
 		| ((wep_id & 0x1F) << 17)
 		| ((rarity & 0x3FF) << 22);
@@ -917,6 +920,7 @@ public bomb_explode(const planterId, const defuserId)
 	#endif
 }
 
+// RegisterHookChain
 public player_got_flashed(
 	const id, const inflictor, const attacker,
 	const Float:fadeTime, const Float:fadeHold,
@@ -938,7 +942,7 @@ public player_got_flashed(
 
 	//  6 bits for blinded player
 	//  6 bits for flash thrower id
-	// 20 bits for event tick delta from current snapshot tick
+	// 20 bits for event tick
 	// 11 bits for fade time -> because fade may be > 9, up to 12, 1 bit extra
 	// 10 bits for fade hold
 	//  8 bits for alpha
@@ -957,6 +961,38 @@ public player_got_flashed(
 
 	#if DEBUG
 	log_amx("PLAYER GOT FLASHED");
+	#endif
+}
+
+public smoke_exploded(const p_item)
+{
+	#if FUNC_TRACE
+	log_amx("smoke_exploded(p_item<%d>)", p_item);
+	#endif
+
+	static Float:origin[3];
+
+	get_entvar(p_item, var_origin, origin);
+	new owner_id = get_entvar(p_item, var_owner);
+
+	new enc_x = floatround(origin[0]);
+	new enc_y = floatround(origin[1]);
+	new enc_z = floatround(origin[2]);
+
+	new expire_tick = floatround(((get_gametime() + 25) / 4), floatround_floor);
+	
+	// First 5 bits for id (the parser must +1);
+	// 11 bits for expiration tick (the parser must * 4 because we divide by 4 for compression);
+	// 16 bits for x;
+	// On second cell, 16 bits for y and 16 for z.
+	push_event(EVT_SMOKE_EXPLODED,
+		((owner_id - 1) & 0x1F) | ((expire_tick & 0x7FF) << 5) | ((enc_x & 0xFFFF) << 16),
+		(enc_y & 0xFFFF) | ((enc_z & 0xFFFF) << 16));
+
+	#if DEBUG
+	log_amx("PLAYER ID %d SMOKE EXPLODED AT (%.02f,%.02f,%.02f)",
+		owner_id,
+		origin[0], origin[1], origin[2]);
 	#endif
 }
 
@@ -1010,7 +1046,8 @@ public open_socket()
 				RegisterHookChain(RG_CBasePlayer_RemovePlayerItem, "remove_player_item", 1);
 				RegisterHookChain(RG_PlantBomb, "bomb_planted_reapi", 1);
 				RegisterHookChain(RG_PlayerBlind, "player_got_flashed", true);
-				
+				RegisterHookChain(RG_CGrenade_ExplodeSmokeGrenade, "smoke_exploded", 1);
+
 				g_handlers_attached = true;
 			}
 

@@ -1,0 +1,14 @@
+// overview description file for de_cpl_mill.bsp
+
+global 
+{
+	ZOOM	1.49
+	ORIGIN	511.25 	     1782.60	   256
+	ROTATED	0
+}
+
+layer 
+{
+	IMAGE	"overviews/de_cpl_mill.bmp"
+	HEIGHT	-1973
+}

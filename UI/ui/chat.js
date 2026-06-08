@@ -378,8 +378,9 @@ window.Chat = (() => {
         _addSay("say_team", name, message, team, alive);
     }
     
-    function addPlayerDropped(name, team) {
-
+    function addSmokeExploded(name, team) {
+        const p = buildRichNameSpan(name, team);
+        addGenericTeamMessage(p, "threw a smoke grenade");
     }
 
     return {
@@ -411,6 +412,7 @@ window.Chat = (() => {
             .querySelectorAll(".line:not(.is-chat)")
             .forEach(el => el.classList.remove("hide"));
         },
+        addSmokeExploded
     };
 
 })();

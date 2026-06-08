@@ -611,6 +611,14 @@ namespace UdpReceiver
                             w.WriteNumber("t", b.Tick);
                             break;
 
+                        case SmokeExplodedEvent b:
+                            w.WriteNumber("i", b.Id);
+                            w.WriteNumber("x", b.X);
+                            w.WriteNumber("y", b.Y);
+                            w.WriteNumber("z", b.Z);
+                            w.WriteNumber("t", b.ExpireTick);
+                            break;
+
                         case SayEvent b:
                             w.WriteNumber("i", b.Id);
                             w.WriteNumber("t", (int)b.Team);

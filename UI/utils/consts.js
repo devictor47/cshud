@@ -137,6 +137,11 @@ window.Consts = (() => {
     const OVERVIEW_ICONS = deepFreeze({
         C4: { src: "hud/c4.png" },
         C4_PLANTED: { src: "hud/c4_planted_ol.png" },
+        SMOKE: { src: "hud/smoke_white.svg" },
+        SMOKE_T_START: { src: "hud/smoke_t_0.svg" },
+        SMOKE_T: { src: "hud/smoke_t.svg" },
+        SMOKE_CT_START: { src: "hud/smoke_ct_0.svg" },
+        SMOKE_CT: { src: "hud/smoke_ct.svg" },
         // hud/csgo-icons/svg_normal/weapon_c4.svg
     });
 
@@ -162,9 +167,10 @@ window.Consts = (() => {
         BOMB_DEFUSED: 8,
         BOMB_EXPLODED: 9,
         FLASHED: 10,
-        DIED: 11,
-        SAY: 12,
-        SAY_TEAM: 13,
+        SMOKE_EXPLODED: 11,
+        DIED: 12,
+        SAY: 13,
+        SAY_TEAM: 14,
     });
 
     const KILL_RARITY = Object.freeze({

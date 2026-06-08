@@ -277,15 +277,41 @@ window.IconAssets = (() => {
             : missingWeaponIcon();
     }
 
+    async function loadOverviewIcons() {
+
+        const promises  = [];
+
+        Object.values(Consts.OVERVIEW_ICONS).forEach(icon => {
+            
+            if (icon.src)
+                promises .push(loadImage(icon.src));
+        });
+
+        const imgs = await Promise.all(promises );
+
+        getOverviewIcon.cache__ ??= new Map();
+        imgs.forEach((img, idx) => {
+            getOverviewIcon.cache__.set(img.__src, img);
+        });        
+    }
+
+    function getOverviewIcon(icon) {
+        return getOverviewIcon
+        .cache__
+        .get(icon?.src || icon?.path);
+    }
+
     return {
         VEST_SRC: "hud/vest.png",
         VESTHELM_SRC: "hud/vesthelm.png",
         createWeaponIcon,
         createItemIcon,
         createFeedIcon,
+        getOverviewIcon,
         Init: async () => {
             await preloadWeaponIcons();
             await preloadFeedIcons();
+            await loadOverviewIcons();
         }
     };
 })();

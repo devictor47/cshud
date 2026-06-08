@@ -54,6 +54,7 @@ namespace UdpReceiver
         BOMB_EXPLODED,
 
         FLASHED, // EVENT_PLAYER_BLINDED_BY_FLASHBANG
+        SMOKE_EXPLODED,
 
         DIED, // killer, victim, assistant, weapon, rarity flags
 

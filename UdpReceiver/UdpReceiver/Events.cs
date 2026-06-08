@@ -146,6 +146,20 @@ namespace UdpReceiver
         }
     }
 
+    sealed class SmokeExplodedEvent : GameEvent
+    {
+        public byte Id;
+        public short X;
+        public short Y;
+        public short Z;
+        public short ExpireTick;
+
+        public SmokeExplodedEvent()
+        {
+            Type = EventType.SMOKE_EXPLODED;
+        }
+    }
+
     sealed class SayEvent : GameEvent
     {
         public byte Id;
