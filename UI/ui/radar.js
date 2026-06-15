@@ -190,6 +190,7 @@ window.RadarUI = (() => {
 
         drawPlayerCache.updateCache(camera.zoom);
         drawC4Cache.updateCache(camera.zoom);
+        drawC4PlantedCache.updateCache(camera.zoom);
     }
 
     function drawPlayers(players, now, timeSinceLast) {
