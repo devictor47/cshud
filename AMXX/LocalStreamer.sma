@@ -979,7 +979,9 @@ public smoke_exploded(const p_item)
 	new enc_y = floatround(origin[1]);
 	new enc_z = floatround(origin[2]);
 
-	new expire_tick = floatround(((get_gametime() + 25) / 4), floatround_floor);
+	// Use ceil instead of floor here to avoid having smoke disappear before it actualy does
+	// in game, in favor of leaving it up to 4 seconds longer. Visually better for spectators.
+	new expire_tick = floatround(((get_gametime() + 25) / 4), floatround_ceil);
 	
 	// First 5 bits for id (the parser must +1);
 	// 11 bits for expiration tick (the parser must * 4 because we divide by 4 for compression);
